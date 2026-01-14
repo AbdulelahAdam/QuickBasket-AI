@@ -1,0 +1,1 @@
+Swagger UI auto-available at /docs via FastAPI.

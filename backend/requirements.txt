@@ -1,0 +1,6 @@
+fastapi>=0.110.0
+uvicorn[standard]
+httpx[http2]>=0.24.0
+beautifulsoup4
+pydantic>=2.12.5
+pydantic-settings>=2.12.0
