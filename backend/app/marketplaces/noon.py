@@ -3,11 +3,13 @@ import re
 from abc import ABC, abstractmethod
 
 import httpx
-from httpx import RemoteProtocolError, ReadTimeout
+from httpx import RemoteProtocolError
 from bs4 import BeautifulSoup
-from fastapi import HTTPException
+import structlog
 
 from app.core.geo import detect_country
+
+logger = structlog.get_logger()
 
 COUNTRY_MAP = {
     "eg": "egypt-en",
@@ -38,6 +40,13 @@ class NoonAdapter(MarketplaceAdapter):
         country = await detect_country()
         locale = COUNTRY_MAP.get(country, "egypt-en")
 
+        logger.info(
+            "noon.fetch.start",
+            url=url,
+            country=country,
+            locale=locale,
+        )
+
         headers = self._build_headers(locale)
         cookies = self._build_cookies(country, locale)
 
@@ -45,13 +54,20 @@ class NoonAdapter(MarketplaceAdapter):
             url=url,
             headers=headers,
             cookies=cookies,
-            locale=locale,
         )
 
         soup = BeautifulSoup(response.text, "html.parser")
 
         price_raw = self._extract_price_raw(soup)
         price, currency = self._normalize_price(price_raw)
+
+        logger.info(
+            "noon.fetch.success",
+            url=str(response.url),
+            status_code=response.status_code,
+            price=price,
+            currency=currency,
+        )
 
         return {
             "marketplace": "noon",
@@ -72,69 +88,51 @@ class NoonAdapter(MarketplaceAdapter):
         url: str,
         headers: dict,
         cookies: dict,
-        locale: str,
     ) -> httpx.Response:
         """
         1) Try HTTP/2
         2) If Noon resets stream → retry with HTTP/1.1
-        3) Warm up session to look human
         """
 
-        timeout = httpx.Timeout(
-            connect=10.0,
-            read=40.0,  # Noon intentionally stalls bots
-            write=10.0,
-            pool=10.0,
+        logger.info(
+            "noon.fetch.transport.start",
+            url=url,
+            http2=True,
         )
 
-        last_exc: Exception | None = None
-
-        # -------- Attempt 1: HTTP/2 --------
+        # Attempt 1: HTTP/2
         try:
             async with httpx.AsyncClient(
                 headers=headers,
                 cookies=cookies,
                 follow_redirects=True,
-                timeout=timeout,
+                timeout=httpx.Timeout(15.0),
                 http2=True,
             ) as client:
-                await self._warm_up(client, locale)
                 return await self._fetch_with_retries(client, url)
-        except (RemoteProtocolError, ReadTimeout) as exc:
-            last_exc = exc
 
-        # -------- Attempt 2: HTTP/1.1 --------
-        try:
-            async with httpx.AsyncClient(
-                headers=headers,
-                cookies=cookies,
-                follow_redirects=True,
-                timeout=timeout,
-                http2=False,
-            ) as client:
-                await self._warm_up(client, locale)
-                return await self._fetch_with_retries(client, url)
-        except (ReadTimeout, Exception) as exc:
-            last_exc = exc
+        except RemoteProtocolError as exc:
+            logger.warning(
+                "noon.fetch.http2_failed",
+                url=url,
+                error=str(exc),
+            )
 
-        # -------- Controlled failure --------
-        raise HTTPException(
-            status_code=503,
-            detail="Noon temporarily unavailable (bot mitigation / throttling)",
-        ) from last_exc
+        # Attempt 2: HTTP/1.1
+        logger.info(
+            "noon.fetch.transport.downgrade",
+            url=url,
+            http2=False,
+        )
 
-    async def _warm_up(self, client: httpx.AsyncClient, locale: str) -> None:
-        """
-        Mimic real browser behavior:
-        - Visit homepage
-        - Let cookies/session settle
-        """
-        try:
-            await client.get(f"https://www.{self.BASE_DOMAIN}/{locale}/")
-            await asyncio.sleep(1.5)
-        except Exception:
-            # Warmup failure should not kill the scrape
-            pass
+        async with httpx.AsyncClient(
+            headers=headers,
+            cookies=cookies,
+            follow_redirects=True,
+            timeout=httpx.Timeout(15.0),
+            http2=False,
+        ) as client:
+            return await self._fetch_with_retries(client, url)
 
     async def _fetch_with_retries(
         self,
@@ -144,12 +142,33 @@ class NoonAdapter(MarketplaceAdapter):
     ) -> httpx.Response:
         for attempt in range(retries):
             try:
+                logger.info(
+                    "noon.fetch.attempt",
+                    url=url,
+                    attempt=attempt + 1,
+                )
+
                 resp = await client.get(url)
                 resp.raise_for_status()
+
                 return resp
-            except Exception:
+
+            except Exception as exc:
+                logger.warning(
+                    "noon.fetch.retry",
+                    url=url,
+                    attempt=attempt + 1,
+                    error=str(exc),
+                )
+
                 if attempt == retries - 1:
+                    logger.error(
+                        "noon.fetch.failed",
+                        url=url,
+                        error=str(exc),
+                    )
                     raise
+
                 await asyncio.sleep(2**attempt)
 
     # -------------------------
@@ -165,7 +184,7 @@ class NoonAdapter(MarketplaceAdapter):
             ),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Referer": f"https://www.{self.BASE_DOMAIN}/{locale}/",
+            "Referer": f"https://{self.BASE_DOMAIN}/{locale}/",
             "Connection": "keep-alive",
         }
 
@@ -184,10 +203,6 @@ class NoonAdapter(MarketplaceAdapter):
         return el.text.strip() if el else None
 
     def _extract_price_raw(self, soup: BeautifulSoup) -> str | None:
-        """
-        Multiple extraction strategies because Noon markup changes often.
-        """
-
         el = soup.select_one('[data-qa="product-price"]')
         if el:
             return el.text.strip()
@@ -209,9 +224,9 @@ class NoonAdapter(MarketplaceAdapter):
             return None, None
 
         raw = raw.replace(",", "").strip()
-        lowered = raw.lower()
 
         currency = "EGP"
+        lowered = raw.lower()
         if "sar" in lowered:
             currency = "SAR"
         elif "aed" in lowered:
