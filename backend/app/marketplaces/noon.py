@@ -1,15 +1,15 @@
 import asyncio
 import re
+import time
 from abc import ABC, abstractmethod
 
 import httpx
-from httpx import RemoteProtocolError
-from bs4 import BeautifulSoup
 import structlog
+from bs4 import BeautifulSoup
 
 from app.core.geo import detect_country
 
-logger = structlog.get_logger()
+logger = structlog.get_logger(__name__)
 
 COUNTRY_MAP = {
     "eg": "egypt-en",
@@ -40,39 +40,45 @@ class NoonAdapter(MarketplaceAdapter):
         country = await detect_country()
         locale = COUNTRY_MAP.get(country, "egypt-en")
 
-        logger.info(
-            "noon.fetch.start",
-            url=url,
-            country=country,
-            locale=locale,
-        )
-
         headers = self._build_headers(locale)
         cookies = self._build_cookies(country, locale)
 
-        response = await self._fetch_with_protocol_downgrade(
-            url=url,
-            headers=headers,
-            cookies=cookies,
-        )
+        try:
+            response = await self._fetch_with_protocol_downgrade(
+                url=url,
+                headers=headers,
+                cookies=cookies,
+            )
+        except Exception as exc:
+            logger.error(
+                "noon.fetch.giveup",
+                url=url,
+                error_type=type(exc).__name__,
+                error_repr=repr(exc),
+            )
+
+            # 🔑 IMPORTANT: graceful degradation
+            return {
+                "marketplace": "noon",
+                "url": url,
+                "country": country,
+                "status": "timeout",
+                "title": None,
+                "price_raw": None,
+                "price": None,
+                "currency": None,
+            }
 
         soup = BeautifulSoup(response.text, "html.parser")
 
         price_raw = self._extract_price_raw(soup)
         price, currency = self._normalize_price(price_raw)
 
-        logger.info(
-            "noon.fetch.success",
-            url=str(response.url),
-            status_code=response.status_code,
-            price=price,
-            currency=currency,
-        )
-
         return {
             "marketplace": "noon",
             "url": str(response.url),
             "country": country,
+            "status": "ok",
             "title": self._safe_text(soup, "h1"),
             "price_raw": price_raw,
             "price": price,
@@ -89,16 +95,7 @@ class NoonAdapter(MarketplaceAdapter):
         headers: dict,
         cookies: dict,
     ) -> httpx.Response:
-        """
-        1) Try HTTP/2
-        2) If Noon resets stream → retry with HTTP/1.1
-        """
-
-        logger.info(
-            "noon.fetch.transport.start",
-            url=url,
-            http2=True,
-        )
+        last_exc = None
 
         # Attempt 1: HTTP/2
         try:
@@ -106,30 +103,25 @@ class NoonAdapter(MarketplaceAdapter):
                 headers=headers,
                 cookies=cookies,
                 follow_redirects=True,
-                timeout=httpx.Timeout(15.0),
+                timeout=httpx.Timeout(connect=10.0, read=30.0, write=30.0, pool=10.0),
                 http2=True,
             ) as client:
                 return await self._fetch_with_retries(client, url)
-
-        except RemoteProtocolError as exc:
+        except Exception as exc:
+            last_exc = exc
             logger.warning(
                 "noon.fetch.http2_failed",
                 url=url,
-                error=str(exc),
+                error_type=type(exc).__name__,
+                error_repr=repr(exc),
             )
 
         # Attempt 2: HTTP/1.1
-        logger.info(
-            "noon.fetch.transport.downgrade",
-            url=url,
-            http2=False,
-        )
-
         async with httpx.AsyncClient(
             headers=headers,
             cookies=cookies,
             follow_redirects=True,
-            timeout=httpx.Timeout(15.0),
+            timeout=httpx.Timeout(connect=10.0, read=30.0, write=30.0, pool=10.0),
             http2=False,
         ) as client:
             return await self._fetch_with_retries(client, url)
@@ -140,36 +132,37 @@ class NoonAdapter(MarketplaceAdapter):
         url: str,
         retries: int = 3,
     ) -> httpx.Response:
-        for attempt in range(retries):
-            try:
-                logger.info(
-                    "noon.fetch.attempt",
-                    url=url,
-                    attempt=attempt + 1,
-                )
+        start = time.monotonic()
 
+        for attempt in range(1, retries + 1):
+            logger.info(
+                "noon.fetch.attempt",
+                url=url,
+                attempt=attempt,
+            )
+
+            try:
                 resp = await client.get(url)
                 resp.raise_for_status()
-
                 return resp
 
             except Exception as exc:
+                elapsed = round(time.monotonic() - start, 2)
+
                 logger.warning(
                     "noon.fetch.retry",
                     url=url,
-                    attempt=attempt + 1,
-                    error=str(exc),
+                    attempt=attempt,
+                    elapsed=elapsed,
+                    error_type=type(exc).__name__,
+                    error_repr=repr(exc),
                 )
 
-                if attempt == retries - 1:
-                    logger.error(
-                        "noon.fetch.failed",
-                        url=url,
-                        error=str(exc),
-                    )
+                # ⛔ Hard stop at ~15s total
+                if elapsed > 15 or attempt == retries:
                     raise
 
-                await asyncio.sleep(2**attempt)
+                await asyncio.sleep(min(2**attempt, 4))
 
     # -------------------------
     # Headers / cookies
@@ -182,10 +175,9 @@ class NoonAdapter(MarketplaceAdapter):
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/120.0.0.0 Safari/537.36"
             ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": f"https://{self.BASE_DOMAIN}/{locale}/",
-            "Connection": "keep-alive",
         }
 
     def _build_cookies(self, country: str, locale: str) -> dict:
@@ -224,9 +216,9 @@ class NoonAdapter(MarketplaceAdapter):
             return None, None
 
         raw = raw.replace(",", "").strip()
+        lowered = raw.lower()
 
         currency = "EGP"
-        lowered = raw.lower()
         if "sar" in lowered:
             currency = "SAR"
         elif "aed" in lowered:
