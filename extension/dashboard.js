@@ -169,8 +169,8 @@
             z-index: 2;
             ${
               product.priceChange < 0
-                ? "background: rgba(34, 197, 94, 0.2); color: 4ade80; border: 1px solid rgba(34, 197, 94, 0.3);"
-                : "background: rgba(239, 68, 68, 0.2); color: f87171; border: 1px solid rgba(239, 68, 68, 0.3);"
+                ? "background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3);"
+                : "background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);"
             }
           ">
             ${escapeHtml(priceChangeText)}
@@ -192,18 +192,18 @@
               ? `<img src="${escapeHtml(product.image)}" alt="${
                   product.name
                 }" loading="lazy" style="max-width: 100%; max-height: 100%; object-fit: contain;">`
-              : '<div style="color: 64748b; font-size: 48px;">📦</div>'
+              : '<div style="color: #64748b; font-size: 48px;">📦</div>'
           }
         </div>
         
         <!-- Info Container: Forces left alignment for title, marketplace, and price -->
         <div style="width: 100%; display: flex; flex-direction: column; align-items: flex-start; flex-grow: 1;">
-          <div style="font-size: 12px; color: 94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
+          <div style="font-size: 12px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
             ${escapeHtml(marketplaceName)}
           </div>
           
           <div style="
-            font-size: 15px; font-weight: 600; color: e2e8f0;
+            font-size: 15px; font-weight: 600; color: #e2e8f0;
             margin-bottom: 12px; line-height: 1.4;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
             overflow: hidden; min-height: 2.8em;
@@ -212,7 +212,7 @@
           <div style="margin-bottom: 20px; width: 100%;">
             <div style="
               font-size: 24px; font-weight: 800;
-              background: linear-gradient(135deg, 3b82f6, 2563eb);
+              background: linear-gradient(135deg, #3b82f6, #2563eb);
               -webkit-background-clip: text; -webkit-text-fill-color: transparent;
               background-clip: text; display: inline-block;
             ">${currentPrice}</div>
@@ -221,9 +221,9 @@
               originalPrice
                 ? `
               <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                <span style="font-size: 14px; color: 64748b; text-decoration: line-through;">${originalPrice}</span>
+                <span style="font-size: 14px; color: #64748b; text-decoration: line-through;">${originalPrice}</span>
                 <span style="font-size: 12px; font-weight: 700; color: ${
-                  product.priceChange < 0 ? "4ade80" : "f87171"
+                  product.priceChange < 0 ? "#4ade80" : "#f87171"
                 };">
                   ${product.priceChange < 0 ? "SAVED" : "UP"}: ${priceDiff}
                 </span>
@@ -241,13 +241,13 @@
           }" style="
             flex: 1; padding: 10px; border-radius: 6px; font-size: 13px; font-weight: 600;
             cursor: pointer; border: none; color: white;
-            background: linear-gradient(135deg, 1e40af 0%, 1e3a8a 100%);
+            background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
           ">View Product</button>
           <button class="action-btn action-btn-danger" data-action="remove" data-id="${
             product.id
           }" style="
             flex: 1; padding: 10px; border-radius: 6px; font-size: 13px; font-weight: 600;
-            cursor: pointer; background: transparent; color: f87171;
+            cursor: pointer; background: transparent; color: #f87171;
             border: 1px solid rgba(239, 68, 68, 0.5);
           ">Remove</button>
         </div>
