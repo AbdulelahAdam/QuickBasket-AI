@@ -1,12 +1,17 @@
 services:
   backend:
     build: ./backend
+    volumes:
+      - ./backend:/app
     environment:
-      - PYTHONUNBUFFERED=1 # Forces Python to output logs immediately
+      - PYTHONUNBUFFERED=1
+      # Recommended: Pass the DB URL as an env var for alembic/env.py to use
+      - DATABASE_URL=postgresql://quickbasket:secret@db:5432/quickbasket
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
@@ -14,8 +19,13 @@ services:
       - "8080:80"
 
   db:
-    image: postgres:15
+    image: postgres:16
     environment:
       POSTGRES_DB: quickbasket
       POSTGRES_USER: quickbasket
-      POSTGRES_PASSWORD: quickbasket
+      POSTGRES_PASSWORD: secret
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "quickbasket", "-d", "quickbasket"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
