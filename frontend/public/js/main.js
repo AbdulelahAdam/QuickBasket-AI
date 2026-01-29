@@ -1,16 +1,8 @@
-// public/js/main.js
-
 document.addEventListener("DOMContentLoaded", () => {
   initializeFAQ();
 });
-
-/**
- * FAQ accordion functionality
- * - Click question to toggle answer
- * - Icon switches between + and −
- */
 function initializeFAQ() {
-  const questions = document.querySelectorAll(".faq-question");
+  const questions = document.querySelectorAll(".faq-question .faq-item");
 
   questions.forEach((question) => {
     question.addEventListener("click", () => {
@@ -20,7 +12,6 @@ function initializeFAQ() {
       if (!faqItem || !icon) return;
 
       faqItem.classList.toggle("active");
-      icon.textContent = faqItem.classList.contains("active") ? "−" : "+";
     });
   });
 }

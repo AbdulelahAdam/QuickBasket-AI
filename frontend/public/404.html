@@ -6,26 +6,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>404 - Page Not Found | QuickBasket AI</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .animated-bg::before {
+            content: '';
+            position: fixed;
+            width: 200%;
+            height: 200%;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(96, 165, 250, 0.1) 0%, transparent 50%);
+            animation: moveGradient 20s ease infinite;
+        }
+
+        @keyframes moveGradient {
+
+            0%,
+            100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+
+            50% {
+                transform: translate(-50px, -50px) rotate(180deg);
+            }
+        }
+
+        .error-code {
+            background: linear-gradient(135deg, 2563eb, 1e40af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .error-icon {
+            font-size: 80px;
+            color: 3b82f6;
+            margin: 20px 0;
+            font-weight: 300;
+        }
+    </style>
 </head>
 
 <body>
     <div class="bg-blur blur-1"></div>
     <div class="bg-blur blur-2"></div>
+    <div class="animated-bg"></div>
 
     <!-- Header/Navigation -->
     <header class="navbar">
         <div class="navbar-container">
             <a href="/" class="brand">
-                <span class="brand-icon">📊</span>
+                <img src="./media/icons/icon48.png" alt="QuickBasket AI" class="brand-icon">
                 <span class="brand-name">QuickBasket AI</span>
             </a>
             <nav class="nav-links">
-                <a href="/#how-it-works">How it Works</a>
-                <a href="/#pricing">Pricing</a>
-                <a href="/#faq">FAQ</a>
-                <a href="/about.html">About</a>
-                <a href="/contact.html">Contact</a>
+                <a href="/how-it-works">How it Works</a>
+                <a href="/pricing">Pricing</a>
+                <a href="/faq">FAQ</a>
+                <a href="about.html">About</a>
+                <a href="contact.html">Contact</a>
             </nav>
+            <button class="nav-cta">Add to Chrome</button>
         </div>
     </header>
 
@@ -33,26 +72,25 @@
     <section class="error-container">
         <div class="error-content">
             <h1 class="error-code">404</h1>
-            <div class="error-emoji">🔍</div>
+            <div class="error-icon">?</div>
             <h2 class="error-title">Page Not Found</h2>
             <p class="error-description">
-                Oops! It looks like this price deal doesn't exist in our database. We searched high and low, but came up
-                empty!
+                Oops! It looks like this page doesn't exist in our system. We searched high and low, but came up empty.
             </p>
 
             <div class="error-jokes">
-                <p>💡 <strong>Pro Tip:</strong> Just like finding a great deal on Amazon, sometimes you have to look in
-                    the right place. Let's get you back on track!</p>
+                <p><strong>Pro Tip:</strong> Just like finding a great deal, sometimes you have to look in the right
+                    place. Let's get you back on track!</p>
             </div>
 
             <p class="error-description">
-                This page might have been moved, deleted, or was never tracked by our system.
-                But don't worry, we have plenty of great deals waiting for you!
+                This page might have been moved, deleted, or never existed. But don't worry, we have plenty of great
+                content waiting for you!
             </p>
 
             <div class="error-actions">
-                <a href="/" class="error-btn">🏠 Back to Home</a>
-                <a href="/#pricing" class="error-btn secondary">💰 View Pricing</a>
+                <a href="/" class="error-btn">Back to Home</a>
+                <a href="/pricing" class="error-btn secondary">View Pricing</a>
             </div>
         </div>
     </section>
@@ -63,6 +101,7 @@
             <div class="footer-cta">
                 <h2>Ready to save money?</h2>
                 <p>Join thousands of smart shoppers using QuickBasket AI</p>
+                <button class="cta-button">Add to Chrome Now</button>
             </div>
             <div class="footer-links">
                 <a href="about.html">About Us</a>

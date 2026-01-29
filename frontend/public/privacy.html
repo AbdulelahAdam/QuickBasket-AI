@@ -6,62 +6,114 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy Policy - QuickBasket AI</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .animated-bg::before {
+            content: '';
+            position: fixed;
+            width: 200%;
+            height: 200%;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(96, 165, 250, 0.1) 0%, transparent 50%);
+            animation: moveGradient 20s ease infinite;
+        }
+
+        @keyframes moveGradient {
+
+            0%,
+            100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+
+            50% {
+                transform: translate(-50px, -50px) rotate(180deg);
+            }
+        }
+
+        .page-content {
+            background: linear-gradient(135deg, rgba(20, 24, 41, 0.8), rgba(30, 40, 70, 0.5));
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 60px rgba(59, 130, 246, 0.15);
+        }
+
+        .back-link::before {
+            content: '←';
+            margin-right: 8px;
+            transition: transform 0.3s ease;
+            display: inline-block;
+        }
+
+        .back-link:hover::before {
+            transform: translateX(-5px);
+        }
+
+        .page-header h1 {
+            background: linear-gradient(135deg, 2563eb 0%, 1e40af 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .page-body h2 {
+            background: linear-gradient(135deg, 3b82f6, 2563eb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .page-body h3 {
+            color: 3b82f6;
+        }
+    </style>
 </head>
 
 <body>
     <div class="bg-blur blur-1"></div>
     <div class="bg-blur blur-2"></div>
+    <div class="animated-bg"></div>
 
-    <!-- Header/Navigation -->
     <header class="navbar">
         <div class="navbar-container">
             <a href="/" class="brand">
-                <span class="brand-icon">📊</span>
+                <img src="./media/icons/icon48.png" alt="QuickBasket AI" class="brand-icon">
                 <span class="brand-name">QuickBasket AI</span>
             </a>
             <nav class="nav-links">
-                <a href="/#how-it-works">How it Works</a>
-                <a href="/#pricing">Pricing</a>
-                <a href="/#faq">FAQ</a>
+                <a href="/how-it-works">How it Works</a>
+                <a href="/pricing">Pricing</a>
+                <a href="/faq">FAQ</a>
                 <a href="about.html">About</a>
                 <a href="contact.html">Contact</a>
             </nav>
+            <button class="nav-cta">Add to Chrome</button>
         </div>
     </header>
 
-    <!-- Privacy Policy Page -->
     <section class="page">
         <div class="container">
             <div class="page-content">
                 <div class="page-header">
-                    <a href="/" class="back-link">← Back to Home</a>
+                    <a href="/" class="back-link">Back to Home</a>
                     <h1>Privacy Policy</h1>
                 </div>
                 <div class="page-body">
                     <h2>1. Introduction</h2>
                     <p>QuickBasket AI ("we" or "us" or "our") operates the QuickBasket AI website and browser extension.
-                        This page
-                        informs you of our policies regarding the collection, use, and disclosure of personal data when
-                        you use our
-                        Service and the choices you have associated with that data.</p>
+                        This page informs you of our policies regarding the collection, use, and disclosure of personal
+                        data when you use our Service and the choices you have associated with that data.</p>
 
                     <h2>2. Information Collection and Use</h2>
                     <p>We collect several different types of information for various purposes to provide and improve our
-                        Service
-                        to you.</p>
+                        Service to you.</p>
 
                     <h3>Types of Data Collected:</h3>
                     <ul>
                         <li><strong>Personal Data:</strong> While using our Service, we may ask you to provide us with
-                            certain
-                            personally identifiable information that can be used to contact or identify you ("Personal
-                            Data").</li>
+                            certain personally identifiable information that can be used to contact or identify you
+                            ("Personal Data").</li>
                         <li><strong>Usage Data:</strong> We may also collect information on how the Service is accessed
-                            and used
-                            ("Usage Data").</li>
+                            and used ("Usage Data").</li>
                         <li><strong>Tracking Data:</strong> Price data and marketplace information you choose to track
-                            through our
-                            extension.</li>
+                            through our extension.</li>
                     </ul>
 
                     <h2>3. Use of Data</h2>
@@ -79,27 +131,24 @@
 
                     <h2>4. Security of Data</h2>
                     <p>The security of your data is important to us but remember that no method of transmission over the
-                        Internet
-                        or method of electronic storage is 100% secure. While we strive to use commercially acceptable
-                        means to
-                        protect your Personal Data, we cannot guarantee its absolute security.</p>
+                        Internet or method of electronic storage is 100% secure. While we strive to use commercially
+                        acceptable means to protect your Personal Data, we cannot guarantee its absolute security.</p>
 
                     <h2>5. Changes to This Privacy Policy</h2>
                     <p>We may update our Privacy Policy from time to time. We will notify you of any changes by posting
-                        the new
-                        Privacy Policy on this page and updating the "effective date" at the top of this Privacy Policy.
-                    </p>
+                        the new Privacy Policy on this page and updating the "effective date" at the top of this Privacy
+                        Policy.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Footer -->
     <footer>
         <div class="footer-content">
             <div class="footer-cta">
                 <h2>Ready to save money?</h2>
                 <p>Join thousands of smart shoppers using QuickBasket AI</p>
+                <button class="cta-button">Add to Chrome Now</button>
             </div>
             <div class="footer-links">
                 <a href="about.html">About Us</a>

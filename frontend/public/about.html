@@ -6,50 +6,102 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About Us - QuickBasket AI</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .animated-bg::before {
+            content: '';
+            position: fixed;
+            width: 200%;
+            height: 200%;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(96, 165, 250, 0.1) 0%, transparent 50%);
+            animation: moveGradient 20s ease infinite;
+        }
+
+        @keyframes moveGradient {
+
+            0%,
+            100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+
+            50% {
+                transform: translate(-50px, -50px) rotate(180deg);
+            }
+        }
+
+        .page-content {
+            background: linear-gradient(135deg, rgba(20, 24, 41, 0.8), rgba(30, 40, 70, 0.5));
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 60px rgba(59, 130, 246, 0.15);
+        }
+
+        .back-link::before {
+            content: '←';
+            margin-right: 8px;
+            transition: transform 0.3s ease;
+            display: inline-block;
+        }
+
+        .back-link:hover::before {
+            transform: translateX(-5px);
+        }
+
+        .page-header h1 {
+            background: linear-gradient(135deg, 2563eb 0%, 1e40af 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .page-body h2 {
+            background: linear-gradient(135deg, 3b82f6, 2563eb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+        }
+    </style>
 </head>
 
 <body>
     <div class="bg-blur blur-1"></div>
     <div class="bg-blur blur-2"></div>
+    <div class="animated-bg"></div>
 
-    <!-- Header/Navigation -->
     <header class="navbar">
         <div class="navbar-container">
             <a href="/" class="brand">
-                <span class="brand-icon">📊</span>
+                <img src="./media/icons/icon48.png" alt="QuickBasket AI" class="brand-icon">
                 <span class="brand-name">QuickBasket AI</span>
             </a>
             <nav class="nav-links">
-                <a href="/#how-it-works">How it Works</a>
-                <a href="/#pricing">Pricing</a>
-                <a href="/#faq">FAQ</a>
+                <a href="/how-it-works">How it Works</a>
+                <a href="/pricing">Pricing</a>
+                <a href="/faq">FAQ</a>
                 <a href="about.html">About</a>
                 <a href="contact.html">Contact</a>
             </nav>
+            <button class="nav-cta">Add to Chrome</button>
         </div>
     </header>
 
-    <!-- About Us Page -->
     <section class="page">
         <div class="container">
             <div class="page-content">
                 <div class="page-header">
-                    <a href="/" class="back-link">← Back to Home</a>
+                    <a href="/" class="back-link">Back to Home</a>
                     <h1>About QuickBasket AI</h1>
                 </div>
                 <div class="page-body">
                     <h2>Our Mission</h2>
                     <p>At QuickBasket AI, our mission is to empower smart shoppers with intelligent tools to make better
                         purchasing decisions. We believe everyone deserves access to real-time price information and
-                        market insights
-                        to save money and time.</p>
+                        market insights to save money and time.</p>
 
                     <h2>Our Story</h2>
                     <p>Founded in 2024, QuickBasket AI was created to solve a real problem: tracking prices manually
-                        across
-                        multiple marketplaces is tedious and ineffective. We developed a browser extension that
-                        automatically
-                        monitors prices, identifies trends, and alerts users when prices drop below their target.</p>
+                        across multiple marketplaces is tedious and ineffective. We developed a browser extension that
+                        automatically monitors prices, identifies trends, and alerts users when prices drop below their
+                        target.</p>
 
                     <h2>What We Do</h2>
                     <p>QuickBasket AI provides a comprehensive price tracking solution that:</p>
@@ -73,25 +125,23 @@
 
                     <h2>Looking Forward</h2>
                     <p>We're constantly expanding our marketplace coverage and adding new features based on user
-                        feedback. Our
-                        roadmap includes support for more e-commerce platforms, advanced analytics dashboards, and team
-                        collaboration features.</p>
+                        feedback. Our roadmap includes support for more e-commerce platforms, advanced analytics
+                        dashboards, and team collaboration features.</p>
 
                     <h2>Join Our Community</h2>
                     <p>Over 10,000 users are already saving money with QuickBasket AI. Join the community of smart
-                        shoppers today
-                        and never overpay again!</p>
+                        shoppers today and never overpay again!</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Footer -->
     <footer>
         <div class="footer-content">
             <div class="footer-cta">
                 <h2>Ready to save money?</h2>
                 <p>Join thousands of smart shoppers using QuickBasket AI</p>
+                <button class="cta-button">Add to Chrome Now</button>
             </div>
             <div class="footer-links">
                 <a href="about.html">About Us</a>
