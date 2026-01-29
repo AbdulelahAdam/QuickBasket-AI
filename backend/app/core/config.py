@@ -1,11 +1,11 @@
-from pydantic_settings import BaseSettings
+import os
 
 
-class Settings(BaseSettings):
-    APP_NAME: str = "QuickBasket AI"
-    DATABASE_URL: str = "sqlite:///./quickbasket.db"
-    GEOIP_PROVIDER: str = "ipapi"
-    USER_AGENT: str = "QuickBasketAI/1.0"
+class Settings:
+    DATABASE_URL = os.getenv(
+        "DATABASE_URL",
+        "postgresql+psycopg2://quickbasket:secret@db:5432/quickbasket",
+    )
 
 
 settings = Settings()
