@@ -12,15 +12,13 @@ class TrackedProduct(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
 
-    marketplace: Mapped[str] = mapped_column(
-        String(32), index=True, nullable=False
-    )  # noon|amazon
+    marketplace: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
     canonical_url: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
 
     external_id: Mapped[str | None] = mapped_column(
         String(128), nullable=True, index=True
-    )  # ASIN or SKU
+    )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="EGP")
@@ -39,12 +37,16 @@ class TrackedProduct(Base):
         nullable=False,
     )
 
+    # Relationships
     snapshots = relationship(
         "PriceSnapshot", back_populates="product", cascade="all, delete-orphan"
     )
     events = relationship(
         "PriceEvent", back_populates="product", cascade="all, delete-orphan"
     )
-    insights = relationship(
-        "AIInsight", back_populates="product", cascade="all, delete-orphan"
+    ai_insights = relationship(
+        "AIInsight",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
