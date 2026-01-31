@@ -291,11 +291,24 @@
         isTracked = true;
         setButtonState("tracked");
         showStatus("Product tracked successfully! ✓", "success");
+        if (trackResponse?.success) {
+          isTracked = true;
+          setButtonState("tracked");
 
-        // Don't close popup - let user see the result
-        console.log("[QB Popup] Product tracked successfully");
-      } else {
-        throw new Error(trackResponse?.error || "Failed to save product");
+          const aiSummary =
+            trackResponse?.backend?.data?.ai?.summary ||
+            trackResponse?.backend?.data?.ai?.decision ||
+            null;
+
+          if (aiSummary) {
+            showStatus(`AI: ${aiSummary}`, "success");
+          } else {
+            showStatus("Product tracked successfully! ✓", "success");
+          }
+          console.log("[QB Popup] Product tracked successfully");
+        } else {
+          throw new Error(trackResponse?.error || "Failed to save product");
+        }
       }
     } catch (error) {
       console.error("[QB Popup] Track error:", error);
@@ -328,8 +341,6 @@
       chrome.tabs.create({
         url: chrome.runtime.getURL("dashboard.html"),
       });
-      // Keep popup open so user can see tracked product
-      // window.close(); // Removed
     } catch (error) {
       console.error("[QB Popup] Dashboard error:", error);
       showStatus("Could not open dashboard", "error");

@@ -64,11 +64,18 @@
     priceFraction: ".a-price-fraction",
     priceOffscreen: ".a-price .a-offscreen",
     priceContainers: [
-      "corePriceDisplay_desktop_feature_div",
-      "corePrice_feature_div",
-      "dp-container",
-      "buybox-container",
-      '[data-feature-name="buybox"]',
+      "#corePriceDisplay_desktop_feature_div", // Primary for Electronics
+      "#corePrice_desktop", // Secondary for Electronics
+      "#apex_desktop", // The main price "Apex" area
+      "#buyBoxAccordion", // Used for products with multiple buying options
+      "#newAccordionRow", // Specifically for the "New" price in buyboxes
+      "#price_inside_buybox", // Inside the right-side buybox
+    ],
+    // Add these to exclude carousel/related noise
+    noiseContainers: [
+      "#desktop-dp-sims_session-similarities-sims-feature", // "Customers who viewed..."
+      "#HLCXComparisonWidget_feature_div", // Comparison table
+      "#bundle-v2-feature-div", // Bundles
     ],
     addToCart: [
       'input[value="Add to Cart"][data-feature-name]',
@@ -120,12 +127,15 @@
     return null;
   }
 
+  let currentASIN = null;
+
   function extractASIN() {
     const match = window.location.href.match(PRODUCT_URL_PATTERN);
     if (!match) return null;
-
-    const asin = match[1];
-    return validators.validateASIN ? validators.validateASIN(asin) : asin;
+    currentASIN = match[1]; // Store globally for this session
+    return validators.validateASIN
+      ? validators.validateASIN(currentASIN)
+      : currentASIN;
   }
 
   function extractProductName() {
@@ -183,16 +193,32 @@
   }
 
   function extractPriceNumber(text) {
-    if (!text) return null;
+    if (!text || text.trim() === "") return null;
 
+    // 1. Pre-process: Strip commas used as thousands separators
+    // This turns "1,329.99" into "1329.99"
+    let cleanText = text.replace(/,(?=\d{3})/g, "");
+
+    // If your region uses commas as decimals (e.g. 1.329,99), use this instead:
+    // let cleanText = text.replace(/\./g, "").replace(",", ".");
+
+    let result = null;
     if (validators.sanitizePrice) {
-      return validators.sanitizePrice(text);
+      console.log("[QB Debug] Using custom price sanitizer for text:", text);
+      result = validators.sanitizePrice(cleanText);
+    } else {
+      // Manual fallback if validator isn't present
+      const numericOnly = cleanText.replace(/[^\d.]/g, "");
+      result = parseFloat(numericOnly) > 0 ? numericOnly : null;
     }
 
-    const cleaned = text.replace(/[^\d.,]/g, "");
-    const price = parseFloat(cleaned);
+    if (result) {
+      console.log("[QB Debug] Price successfully sanitized:", result);
+    } else {
+      console.log("[QB Debug] Sanitization FAILED for:", text);
+    }
 
-    return price > 0 && price < 1000000 ? cleaned : null;
+    return result;
   }
 
   function combinePriceParts(wholeEl) {
@@ -222,21 +248,25 @@
   // ==========================================
 
   function extractPrice() {
-    let price = extractFromBuyingOptions();
+    let price = null;
+
+    // 1. HIGH PRIORITY: Try the ASIN-Locked Containers first
+    price = extractFromPriceContainers();
+    if (price) {
+      console.log("[QB] Found Primary BuyBox Price:", price);
+      return price; // STOP HERE
+    }
+
+    // 2. Try Format Tabs (Kindle/Books)
+    price = extractFromBuyingOptions();
     if (price) return price;
 
+    // 3. Try Near Add To Cart
     price = extractNearAddToCart();
     if (price) return price;
 
-    price = extractFromPriceContainers();
-    if (price) return price;
-
-    price = extractFromFormatTabs();
-    if (price) return price;
-
-    price = extractFromUpperViewport();
-    if (price) return price;
-
+    // 4. FINAL FALLBACK: Only if everything above failed
+    console.log("[QB] No primary price found, trying generic fallback...");
     return extractFirstValidPrice();
   }
 
@@ -285,16 +315,84 @@
   }
 
   function extractFromPriceContainers() {
+    // 1. Ensure we have the ASIN for the main product
+    const asin = extractASIN();
+    if (!asin) return null;
+
+    // 2. EXPLICIT TARGETING: Look for the specific BuyBox ID
+    // This is the div you found in DevTools ($1,329.99)
+    const primaryBox =
+      document.getElementById("corePriceDisplay_desktop_feature_div") ||
+      document.getElementById("corePrice_desktop") ||
+      document.getElementById("apex_desktop");
+
+    if (primaryBox) {
+      // Look for the specific "Price to Pay" offscreen text
+      const offscreen =
+        primaryBox.querySelector(".aok-offscreen") ||
+        primaryBox.querySelector(".a-offscreen");
+
+      if (offscreen && offscreen.textContent.trim()) {
+        const price = extractPriceNumber(offscreen.textContent);
+        if (price) {
+          console.log("[QB] Found Locked BuyBox Price:", price);
+          return price;
+        }
+      }
+    }
+
+    // 3. SECONDARY TARGETING: Use the ASIN attribute filter
+    // We look for any container matching the ASIN, but EXCLUDE anything inside carousels
+    const asinSelectors = [
+      `#centerCol [data-csa-c-asin="${asin}"]`,
+      `#rightCol [data-csa-c-asin="${asin}"]`,
+      `[data-csa-c-asin="${asin}"]:not([class*="carousel"])`,
+    ];
+
+    for (const selector of asinSelectors) {
+      const container = document.querySelector(selector);
+      if (!container) continue;
+
+      // Try offscreen first (cleanest data)
+      const offscreen = container.querySelector(".a-offscreen, .aok-offscreen");
+      if (offscreen) {
+        const price = extractPriceNumber(offscreen.textContent);
+        if (price) return price;
+      }
+
+      // Try the broken up price (whole + fraction)
+      const whole = container.querySelector(SELECTORS.priceWhole);
+      if (whole) {
+        const price = combinePriceParts(whole);
+        if (price) return price;
+      }
+    }
+
+    // 4. FALLBACK: Check common containers but ensure they are in the upper page
     for (const selector of SELECTORS.priceContainers) {
       const container = document.querySelector(selector);
       if (!container) continue;
 
-      const priceSpan = container.querySelector(SELECTORS.priceWhole);
+      // Skip if this container is deep down in "Sponsored" or "Related" sections
+      if (
+        container.closest("#sims-consolidated-2_feature_div") ||
+        container.closest(".a-carousel-container")
+      ) {
+        continue;
+      }
+
+      const priceSpan =
+        container.querySelector(".a-offscreen, .aok-offscreen") ||
+        container.querySelector(SELECTORS.priceWhole);
+
       if (priceSpan) {
-        const price = combinePriceParts(priceSpan);
+        const price = priceSpan.classList.contains("a-price-whole")
+          ? combinePriceParts(priceSpan)
+          : extractPriceNumber(priceSpan.textContent);
         if (price) return price;
       }
     }
+
     return null;
   }
 
@@ -331,13 +429,16 @@
 
     for (const span of allPriceSpans) {
       const price = combinePriceParts(span);
-      if (price) return price;
+      if (price) {
+        console.log("[QB] Locking first valid fallback price:", price);
+        return price; // <--- CRITICAL: Stop the loop here!
+      }
     }
 
     const offscreenPrices = document.querySelectorAll(SELECTORS.priceOffscreen);
     for (const el of offscreenPrices) {
       const price = extractPriceNumber(el.textContent);
-      if (price) return price;
+      if (price) return price; // Stop here
     }
 
     return null;

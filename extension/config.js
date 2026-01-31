@@ -1,15 +1,8 @@
 /**
  * QuickBasket AI - Configuration & Constants (Optimized)
- * Improvements:
- * - Frozen objects for immutability
- * - Better tree-shaking support
- * - Reduced memory footprint
- * - More efficient data structures
  */
-
 (function () {
   "use strict";
-
   // ==========================================
   // APPLICATION SETTINGS
   // ==========================================
@@ -20,25 +13,33 @@
   });
 
   // ==========================================
+  // BACKEND API SETTINGS
+  // ==========================================
+  const API = Object.freeze({
+    BASE_URL: "http://127.0.0.1:8000",
+    ROUTES: Object.freeze({
+      TRACK_BROWSER: "/api/v1/track/browser",
+      ALERTS_PENDING: "/api/v1/alerts/pending",
+      ALERT_ACK: (id) => `/api/v1/alerts/${encodeURIComponent(id)}/ack`,
+    }),
+    TIMEOUT_MS: 15000,
+    POLL_INTERVAL_MINUTES: 2,
+    USER_AGENT: "QuickBasketAI-Extension/0.1.0",
+  });
+
+  // ==========================================
   // VALIDATION LIMITS
   // ==========================================
   const LIMITS = Object.freeze({
-    // Product data
     MAX_PRODUCT_NAME_LENGTH: 500,
     MIN_PRODUCT_NAME_LENGTH: 3,
     MAX_PRICE: 1000000,
     MIN_PRICE: 0.01,
-
-    // SKU/ASIN
     ASIN_LENGTH: 10,
     SKU_MIN_LENGTH: 3,
     SKU_MAX_LENGTH: 30,
-
-    // Storage
     MAX_PRODUCTS: 100,
-    STORAGE_QUOTA_BYTES: 5242880, // 5MB
-
-    // UI
+    STORAGE_QUOTA_BYTES: 5242880,
     MAX_SEARCH_RESULTS: 50,
     PRODUCT_IMAGE_MAX_HEIGHT: 180,
   });
@@ -47,29 +48,20 @@
   // TIMING CONSTANTS (milliseconds)
   // ==========================================
   const TIMING = Object.freeze({
-    // Popup
     POPUP_CLOSE_DELAY: 1500,
     POPUP_STATUS_DURATION: 3000,
-
-    // Price checking
     PRICE_CHECK_INITIAL_DELAY: 3000,
-    PRICE_CHECK_INTERVAL: 3600000, // 1 hour
-    PRICE_CHECK_RETRY_DELAY: 60000, // 1 minute
-
-    // Injection
+    PRICE_CHECK_INTERVAL: 3600000,
+    PRICE_CHECK_RETRY_DELAY: 60000,
     INJECT_INITIAL_DELAY: 3000,
     INJECT_RETRY_DELAY: 500,
-
-    // URL monitoring
     URL_CHECK_INTERVAL: 500,
-    URL_MONITOR_CLEANUP: 300000, // 5 minutes
-
-    // Notifications
+    URL_MONITOR_CLEANUP: 300000,
     NOTIFICATION_DURATION: 5000,
   });
 
   // ==========================================
-  // MARKETPLACES (Optimized structure)
+  // MARKETPLACES
   // ==========================================
   const MARKETPLACES = Object.freeze({
     AMAZON: Object.freeze({
@@ -106,20 +98,15 @@
   });
 
   // ==========================================
-  // CURRENCIES (Optimized with Map for faster lookups)
+  // CURRENCIES
   // ==========================================
   const CURRENCIES = new Map([
-    // North America
     ["USD", { code: "USD", symbol: "$", name: "US Dollar" }],
     ["CAD", { code: "CAD", symbol: "C$", name: "Canadian Dollar" }],
-
-    // Europe
     ["GBP", { code: "GBP", symbol: "£", name: "British Pound" }],
     ["EUR", { code: "EUR", symbol: "€", name: "Euro" }],
     ["SEK", { code: "SEK", symbol: "kr", name: "Swedish Krona" }],
     ["PLN", { code: "PLN", symbol: "zł", name: "Polish Złoty" }],
-
-    // Middle East
     ["AED", { code: "AED", symbol: "د.إ", name: "UAE Dirham" }],
     ["SAR", { code: "SAR", symbol: "ر.س", name: "Saudi Riyal" }],
     ["KWD", { code: "KWD", symbol: "د.ك", name: "Kuwaiti Dinar" }],
@@ -127,42 +114,31 @@
     ["BHD", { code: "BHD", symbol: "د.ب", name: "Bahraini Dinar" }],
     ["OMR", { code: "OMR", symbol: "ر.ع", name: "Omani Rial" }],
     ["EGP", { code: "EGP", symbol: "ج.م", name: "Egyptian Pound" }],
-
-    // Asia-Pacific
     ["JPY", { code: "JPY", symbol: "¥", name: "Japanese Yen" }],
     ["INR", { code: "INR", symbol: "₹", name: "Indian Rupee" }],
     ["SGD", { code: "SGD", symbol: "S$", name: "Singapore Dollar" }],
     ["AUD", { code: "AUD", symbol: "A$", name: "Australian Dollar" }],
-
-    // Latin America
     ["BRL", { code: "BRL", symbol: "R$", name: "Brazilian Real" }],
     ["MXN", { code: "MXN", symbol: "Mex$", name: "Mexican Peso" }],
-
-    // Other
     ["TRY", { code: "TRY", symbol: "₺", name: "Turkish Lira" }],
     ["ZAR", { code: "ZAR", symbol: "R", name: "South African Rand" }],
   ]);
 
-  // Get valid currency codes as Set for O(1) lookup
   const VALID_CURRENCY_CODES = Object.freeze(Array.from(CURRENCIES.keys()));
 
   // ==========================================
   // MESSAGE TYPES
   // ==========================================
   const MESSAGE_TYPES = Object.freeze({
-    // Injected -> Content
     AMAZON_PRODUCT: "AMAZON_PRODUCT",
     NOON_PRODUCT: "NOON_PRODUCT",
-
-    // Content <-> Background
     TRACK_PRODUCT: "trackProduct",
     GET_PRODUCT_INFO: "getProductInfo",
     UPDATE_PRICE: "updatePrice",
-
-    // Background -> UI
     PRODUCT_TRACKED: "productTracked",
     PRICE_UPDATED: "priceUpdated",
     PRICE_DROP_ALERT: "priceDropAlert",
+    AI_INSIGHT: "aiInsight",
   });
 
   // ==========================================
@@ -174,6 +150,7 @@
     PRICE_HISTORY: "priceHistory",
     ALERTS: "alerts",
     LAST_CHECK: "lastCheck",
+    BACKEND_MAP: "backendMap",
   });
 
   // ==========================================
@@ -205,8 +182,6 @@
     ASIN: /^[A-Z0-9]{10}$/,
     SKU: /^[A-Z0-9]{3,30}$/i,
     PRICE: /^\d+(\.\d{2})?$/,
-
-    // Security patterns (compiled once)
     SCRIPT_TAG: /<script[^>]*>.*?<\/script>/gi,
     IFRAME_TAG: /<iframe[^>]*>.*?<\/iframe>/gi,
     OBJECT_TAG: /<object[^>]*>.*?<\/object>/gi,
@@ -223,7 +198,7 @@
   const DEFAULT_SETTINGS = Object.freeze({
     notifications: Object.freeze({
       enabled: true,
-      priceDropOnly: true,
+      priceDropOnly: false,
       sound: false,
     }),
     priceCheck: Object.freeze({
@@ -236,16 +211,17 @@
       showPercentage: true,
     }),
     alerts: Object.freeze({
-      priceDropThreshold: 5, // percent
+      priceDropThreshold: 5,
       customTargetPrice: null,
     }),
   });
 
   // ==========================================
-  // EXPORT CONFIGURATION
+  // EXPORT
   // ==========================================
   const config = Object.freeze({
     APP_CONFIG,
+    API,
     LIMITS,
     TIMING,
     MARKETPLACES,
@@ -259,13 +235,5 @@
     DEFAULT_SETTINGS,
   });
 
-  // Browser extension export
-  if (typeof window !== "undefined") {
-    window.QB_CONFIG = config;
-  }
-
-  // Module export (for Node.js/build tools)
-  if (typeof module !== "undefined" && module.exports) {
-    module.exports = config;
-  }
+  self.QB_CONFIG = config;
 })();

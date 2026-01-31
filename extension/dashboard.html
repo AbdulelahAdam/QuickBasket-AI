@@ -181,15 +181,25 @@
         .controls {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-            gap: 16px;
+            align-items: flex-end;
+            margin-bottom: 32px;
+            gap: 20px;
             flex-wrap: wrap;
+        }
+
+        .search-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
         }
 
         .search-box {
             flex: 1;
-            min-width: 250px;
+            min-width: 300px;
         }
 
         .search-input {
@@ -215,10 +225,13 @@
         .filters {
             display: flex;
             gap: 12px;
+            height: 45px;
+            align-items: center;
         }
 
         .filter-btn {
-            padding: 8px 16px;
+            height: 100%;
+            padding: 0 16px;
             background: rgba(20, 24, 41, 0.6);
             border: 1px solid rgba(59, 130, 246, 0.2);
             border-radius: 6px;
@@ -283,20 +296,32 @@
 
         .product-badge {
             position: absolute;
-            top: 12px;
+            top: -10px;
             right: 12px;
             padding: 4px 12px;
             border-radius: 12px;
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 700;
             text-transform: uppercase;
+            z-index: 20;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
+
 
         .badge-down {
             background: rgba(34, 197, 94, 0.2);
             color: #4ade80;
             border: 1px solid rgba(34, 197, 94, 0.3);
         }
+
+        .badge-stable {
+            background: rgba(148, 163, 184, 0.1);
+            color: #94a3b8;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
 
         .badge-up {
             background: rgba(239, 68, 68, 0.2);
@@ -404,6 +429,24 @@
             outline-offset: 2px;
         }
 
+        .action-btn-success {
+            background: transparent;
+            border: 1px solid rgba(34, 197, 94, 0.5);
+            color: #22c55e;
+            transition: all 0.2s;
+        }
+
+        .action-btn-success:hover {
+            background: rgba(34, 197, 94, 0.1);
+            border-color: #22c55e;
+        }
+
+        .action-btn-success:focus {
+            outline: 2px solid #22c55e;
+            outline-offset: 2px;
+        }
+
+
         .empty-state {
             text-align: center;
             padding: 80px 20px;
@@ -501,10 +544,11 @@
 
         <div class="controls">
             <div class="search-box">
-                <label for="searchInput" class="sr-only">Search products</label>
+                <label for="searchInput" class="search-label">Search products</label>
                 <input type="search" class="search-input" placeholder="Search products..." id="searchInput"
                     aria-label="Search products">
             </div>
+
             <div class="filters" role="group" aria-label="Filter products">
                 <button class="filter-btn active" data-filter="all" aria-pressed="true">All</button>
                 <button class="filter-btn" data-filter="amazon" aria-pressed="false">Amazon</button>
@@ -514,7 +558,6 @@
         </div>
 
         <main class="products-grid" id="productsGrid" role="region" aria-label="Tracked products">
-            <!-- Products will be loaded here dynamically -->
         </main>
 
         <div class="empty-state" id="emptyState" style="display: none;">
@@ -527,6 +570,8 @@
         </div>
     </div>
 
+    <script src="config.js"></script>
+    <script src="vendor/chart.umd.min.js"></script>
     <script src="dashboard.js"></script>
 </body>
 

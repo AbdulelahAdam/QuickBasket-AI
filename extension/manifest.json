@@ -28,6 +28,7 @@
 
   "host_permissions": [
     "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
     "https://*.amazon.com/*",
     "https://*.amazon.ca/*",
     "https://*.amazon.co.uk/*",
@@ -44,14 +45,13 @@
   ],
 
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
 
   "content_scripts": [
     {
       "matches": ["https://*.noon.com/*"],
-      "js": ["noon.js"],
+      "js": ["config.js", "noon.js"],
       "run_at": "document_start",
       "all_frames": false
     },
@@ -70,7 +70,7 @@
         "https://*.amazon.in/*",
         "https://*.amazon.co.jp/*"
       ],
-      "js": ["amazon.js"],
+      "js": ["config.js", "amazon.js"],
       "run_at": "document_start",
       "all_frames": false
     }
