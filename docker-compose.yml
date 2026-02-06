@@ -5,8 +5,10 @@ services:
       - ./backend:/app
     environment:
       - PYTHONUNBUFFERED=1
-      # Recommended: Pass the DB URL as an env var for alembic/env.py to use
       - DATABASE_URL=postgresql://quickbasket:secret@db:5432/quickbasket
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     depends_on:

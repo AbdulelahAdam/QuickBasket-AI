@@ -24,7 +24,7 @@ body {
   color: var(--text-light);
 }
 
-/* Animated background elements */
+
 .bg-blur {
   position: fixed;
   width: 500px;
@@ -84,7 +84,7 @@ body {
 }
 
 .brand-logo {
-  height: 60px; /* 160px is way too large! */
+  height: 60px; 
   width: auto;
   max-width: 150px;
   filter: brightness(0) invert(1);
@@ -122,7 +122,7 @@ body {
   z-index: 10;
 }
 
-/* Navbar */
+
 .navbar {
   position: fixed;
   top: 0;
@@ -235,7 +235,7 @@ body {
   box-shadow: 0 8px 16px rgba(59, 130, 246, 0.2);
 }
 
-/* Hero Section */
+
 .hero {
   min-height: calc(100vh - 70px);
   display: flex;
@@ -430,7 +430,7 @@ h1 {
   border-color: rgba(59, 130, 246, 0.8);
 }
 
-/* Stats */
+
 .stats {
   display: flex;
   justify-content: space-around;
@@ -471,7 +471,7 @@ h1 {
   margin-top: 8px;
 }
 
-/* Marketplace */
+
 .marketplace-icons {
   margin-top: 60px;
   padding-top: 60px;
@@ -495,7 +495,7 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   font-size: 1.5rem;
-  gap: 40px; /* Consistent spacing */
+  gap: 40px; 
 }
 
 .marketplace-item {
@@ -513,11 +513,11 @@ h1 {
   justify-content: center;
   color: #e2e8f0;
 
-  padding: 30px 40px; /* Increased padding for better balance */
+  padding: 30px 40px; 
   border-radius: 15px;
 
-  min-height: 120px; /* Fixed height for consistency */
-  min-width: 180px; /* Fixed minimum width */
+  min-height: 120px; 
+  min-width: 180px; 
 }
 
 .marketplace-item:hover {
@@ -526,7 +526,7 @@ h1 {
   transform: translateY(-4px);
 }
 
-/* Sections */
+
 section {
   padding: 80px 20px;
   position: relative;
@@ -550,7 +550,7 @@ section {
   margin-bottom: 50px;
 }
 
-/* How It Works */
+
 #how-it-works {
   background: linear-gradient(135deg, #0f1428 0%, #1a1f3a 100%);
 }
@@ -609,7 +609,7 @@ section {
   transform: translateY(-5px);
 }
 
-/* Testimonials */
+
 #testimonials {
   background: rgba(10, 14, 39, 0.5);
   padding: 100px 20px;
@@ -663,7 +663,7 @@ section {
   font-size: 0.9rem;
 }
 
-/* Pricing */
+
 #pricing {
   background: linear-gradient(135deg, #0f1428 0%, #1a1f3a 100%);
 }
@@ -743,13 +743,13 @@ section {
 }
 
 .price-features li:before {
-  content: "✓ ";
+  content: " ";
   color: #3b82f6;
   font-weight: bold;
   margin-right: 10px;
 }
 
-/* FAQ */
+
 #faq {
   background: rgba(10, 14, 39, 0.5);
   padding: 100px 20px;
@@ -810,7 +810,7 @@ section {
   display: block;
 }
 
-/* Footer */
+
 footer {
   background: rgba(10, 14, 39, 0.9);
   color: #cbd5e1;
@@ -871,7 +871,7 @@ footer {
   font-size: 0.85rem;
 }
 
-/* Page Styles */
+
 .page {
   min-height: 100vh;
   padding: 120px 20px 80px;
@@ -965,7 +965,7 @@ footer {
   margin-bottom: 10px;
 }
 
-/* Contact Form */
+
 .contact-form-wrapper {
   max-width: 600px;
 }
@@ -1037,7 +1037,7 @@ footer {
   margin-bottom: 12px;
 }
 
-/* Responsive */
+
 @media (max-width: 1024px) {
   .navbar-container {
     padding: 0 25px;
@@ -1149,7 +1149,7 @@ footer {
   }
 }
 
-/* Error Page Styles */
+
 .error-container {
   min-height: 100vh;
   display: flex;
