@@ -1013,24 +1013,17 @@ const CONNECTIVITY_CHECK_INTERVAL = 30000; // 30 seconds
 async function checkActualConnectivity(forcedCheck = false) {
   const now = Date.now();
 
-  console.log(
-    `[QB DEBUG] checkActualConnectivity called - forcedCheck: ${forcedCheck}, isOnline: ${isOnline}`
-  );
-
   if (
     !forcedCheck &&
     isOnline &&
     now - lastConnectivityCheck < CONNECTIVITY_CHECK_INTERVAL
   ) {
-    console.log(`[QB DEBUG] Debounce: returning cached isOnline = true`);
     return true;
   }
 
-  // console.log(`[QB DEBUG] Fresh connectivity check...`);
   lastConnectivityCheck = now;
 
   if (!navigator.onLine) {
-    // console.log(`[QB DEBUG] navigator.onLine = false`);
     if (isOnline) {
       console.log("[QB] User is offline");
       isOnline = false;
@@ -1038,8 +1031,6 @@ async function checkActualConnectivity(forcedCheck = false) {
     }
     return false;
   }
-
-  // console.log(`[QB DEBUG] navigator.onLine = true, testing actual internet...`);
 
   try {
     const controller = new AbortController();
@@ -1053,11 +1044,6 @@ async function checkActualConnectivity(forcedCheck = false) {
     });
 
     clearTimeout(timeout);
-
-    // console.log(
-    //   `[QB DEBUG] Internet check completed, response type: ${response.type}`
-    // );
-
     const nowOnline = response.type === "opaque" || response.ok;
     const wasOffline = !isOnline;
 
@@ -1072,10 +1058,8 @@ async function checkActualConnectivity(forcedCheck = false) {
       broadcastOnlineStatus(false);
     }
 
-    // console.log(`[QB DEBUG] Final isOnline state: ${isOnline}`);
     return nowOnline;
   } catch (error) {
-    // console.log(`[QB DEBUG] Internet check failed:`, error);
     if (isOnline) {
       console.log("[QB] User is offline: ", error.message, ")");
       isOnline = false;
