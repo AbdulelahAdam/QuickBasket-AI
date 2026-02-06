@@ -7,7 +7,6 @@ def normalize_price(raw: str | None) -> tuple[float | None, str | None]:
 
     text = raw.replace(",", "").strip().lower()
 
-    # Currency detection
     if "egp" in text or "جنيه" in text:
         currency = "EGP"
     elif "sar" in text or "ريال" in text:

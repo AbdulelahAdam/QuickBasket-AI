@@ -7,14 +7,14 @@ class Base(DeclarativeBase):
     pass
 
 
-# Engine configuration
+
 engine = create_engine(
     settings.DATABASE_URL,
     future=True,
     pool_pre_ping=True,
 )
 
-# Session factory
+
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,

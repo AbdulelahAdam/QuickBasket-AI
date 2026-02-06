@@ -8,7 +8,7 @@ from app.db.base import Base
 
 target_metadata = Base.metadata
 
-from app.db import models  # noqa: F401 (ensures models are imported)
+from app.db import models
 
 config = context.config
 fileConfig(config.config_file_name)

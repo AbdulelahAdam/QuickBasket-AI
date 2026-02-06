@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, aliased
-from sqlalchemy import func, select, desc, and_
-from datetime import datetime, timedelta
-
+from fastapi import APIRouter, Depends, HTTPException, Body
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, desc, case
+from datetime import datetime, timedelta, timezone
+from pydantic import BaseModel
 from app.db.session import get_db
 from app.db.models import TrackedProduct, PriceSnapshot, AIInsight
 from app.api.v1.schemas import DashboardProductOut, ProductDetailOut, PricePoint
@@ -10,101 +10,128 @@ from app.api.v1.schemas import DashboardProductOut, ProductDetailOut, PricePoint
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-from sqlalchemy.orm import Session, aliased
-
-
 @router.get("/products", response_model=list[DashboardProductOut])
-def list_dashboard_products(db: Session = Depends(get_db)):
-    last_snap_subq = (
-        select(
-            PriceSnapshot.tracked_product_id.label("pid"),
-            func.max(PriceSnapshot.fetched_at).label("last_time"),
-        )
-        .group_by(PriceSnapshot.tracked_product_id)
-        .subquery()
+def list_dashboard_products(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    since_24h = now - timedelta(hours=24)
+
+    products = (
+        db.query(TrackedProduct)
+        .options(joinedload(TrackedProduct.snapshots))
+        .filter(TrackedProduct.is_active == True)
+        .order_by(desc(TrackedProduct.updated_at))
+        .offset(skip)
+        .limit(limit)
+        .all()
     )
 
-    last_snap_join = (
-        select(PriceSnapshot)
-        .join(
-            last_snap_subq,
-            and_(
-                PriceSnapshot.tracked_product_id == last_snap_subq.c.pid,
-                PriceSnapshot.fetched_at == last_snap_subq.c.last_time,
-            ),
-        )
-        .subquery()
-    )
-
-    agg_subq = (
-        select(
-            PriceSnapshot.tracked_product_id.label("pid"),
+    snapshot_stats = (
+        db.query(
+            PriceSnapshot.tracked_product_id,
             func.count(PriceSnapshot.id).label("snapshots"),
             func.min(PriceSnapshot.price).label("min_price"),
             func.max(PriceSnapshot.price).label("max_price"),
             func.min(PriceSnapshot.fetched_at).label("first_seen"),
             func.max(PriceSnapshot.fetched_at).label("last_seen"),
         )
+        .filter(PriceSnapshot.tracked_product_id.in_([p.id for p in products]))
         .group_by(PriceSnapshot.tracked_product_id)
-        .subquery()
-    )
-
-    Agg = aliased(agg_subq)
-    LastSnap = aliased(last_snap_join)
-
-    rows = (
-        db.query(TrackedProduct, Agg, LastSnap)
-        .outerjoin(Agg, Agg.c.pid == TrackedProduct.id)
-        .outerjoin(LastSnap, LastSnap.c.tracked_product_id == TrackedProduct.id)
-        .filter(TrackedProduct.is_active.is_(True))
-        .order_by(desc(TrackedProduct.updated_at))
         .all()
     )
 
-    now = datetime.utcnow()
-    since_24h = now - timedelta(hours=24)
-    out: list[DashboardProductOut] = []
+    stats_dict = {stat.tracked_product_id: stat for stat in snapshot_stats}
 
-    for row in rows:
-        product = row.TrackedProduct
-
-        snapshots_count = int(getattr(row, "snapshots", 0) or 0)
-        min_p = (
-            float(getattr(row, "min_price", 0))
-            if getattr(row, "min_price", None) is not None
-            else None
-        )
-        max_p = (
-            float(getattr(row, "max_price", 0))
-            if getattr(row, "max_price", None) is not None
-            else None
-        )
-        first_seen = getattr(row, "first_seen", None)
-        last_seen = getattr(row, "last_seen", None)
-
-        last_price = None
-        if hasattr(row, "price"):
-            last_price = float(row.price) if row.price is not None else None
-
-        cutoff_snap = (
-            db.query(PriceSnapshot)
+    last_prices = {}
+    if products:
+        last_price_subquery = (
+            db.query(
+                PriceSnapshot.tracked_product_id,
+                PriceSnapshot.price,
+                func.row_number()
+                .over(
+                    partition_by=PriceSnapshot.tracked_product_id,
+                    order_by=desc(PriceSnapshot.fetched_at),
+                )
+                .label("rn"),
+            )
             .filter(
-                PriceSnapshot.tracked_product_id == product.id,
-                PriceSnapshot.fetched_at >= since_24h,
+                PriceSnapshot.tracked_product_id.in_([p.id for p in products]),
                 PriceSnapshot.price.isnot(None),
             )
-            .order_by(PriceSnapshot.fetched_at.asc())
-            .first()
-        ) or db.query(PriceSnapshot).filter(
-            PriceSnapshot.tracked_product_id == product.id
-        ).order_by(
-            PriceSnapshot.fetched_at.asc()
-        ).first()
+            .subquery()
+        )
+
+        last_price_results = (
+            db.query(
+                last_price_subquery.c.tracked_product_id, last_price_subquery.c.price
+            )
+            .filter(last_price_subquery.c.rn == 1)
+            .all()
+        )
+
+        last_prices = {pid: float(price) for pid, price in last_price_results}
+
+    cutoff_prices = {}
+    if products:
+        cutoff_subquery = (
+            db.query(
+                PriceSnapshot.tracked_product_id,
+                PriceSnapshot.price,
+                PriceSnapshot.fetched_at,
+                func.row_number()
+                .over(
+                    partition_by=PriceSnapshot.tracked_product_id,
+                    order_by=case(
+                        (
+                            PriceSnapshot.fetched_at >= since_24h,
+                            PriceSnapshot.fetched_at,
+                        ),
+                        else_=PriceSnapshot.fetched_at,
+                    ).asc(),
+                )
+                .label("rn"),
+            )
+            .filter(
+                PriceSnapshot.tracked_product_id.in_([p.id for p in products]),
+                PriceSnapshot.price.isnot(None),
+            )
+            .subquery()
+        )
+
+        cutoff_results = (
+            db.query(cutoff_subquery.c.tracked_product_id, cutoff_subquery.c.price)
+            .filter(cutoff_subquery.c.rn == 1)
+            .all()
+        )
+
+        cutoff_prices = {pid: float(price) for pid, price in cutoff_results}
+
+    out: list[DashboardProductOut] = []
+
+    for product in products:
+        stats = stats_dict.get(product.id)
+
+        snapshots_count = int(stats.snapshots) if stats else 0
+        min_p = (
+            float(stats.min_price) if stats and stats.min_price is not None else None
+        )
+        max_p = (
+            float(stats.max_price) if stats and stats.max_price is not None else None
+        )
+        first_seen = stats.first_seen if stats else None
+        last_seen = stats.last_seen if stats else None
+
+        last_price = last_prices.get(product.id)
 
         change_24h = None
-        if last_price is not None and cutoff_snap and cutoff_snap.price is not None:
+        if last_price is not None and product.id in cutoff_prices:
+            cutoff_price = cutoff_prices[product.id]
             if snapshots_count > 1:
-                change_24h = last_price - float(cutoff_snap.price)
+                change_24h = last_price - cutoff_price
             else:
                 change_24h = 0.0
 
@@ -127,6 +154,9 @@ def list_dashboard_products(db: Session = Depends(get_db)):
                 snapshots=snapshots_count,
                 last_updated=last_seen,
                 change_24h=change_24h,
+                update_interval=product.update_interval or 1,
+                next_run_at=product.next_run_at,
+                last_availability=product.last_availability,
             )
         )
 
@@ -135,19 +165,21 @@ def list_dashboard_products(db: Session = Depends(get_db)):
 
 @router.get("/products/{product_id}", response_model=ProductDetailOut)
 def get_product_detail(product_id: int, db: Session = Depends(get_db)):
-    product = db.query(TrackedProduct).filter(TrackedProduct.id == product_id).first()
+
+    product = (
+        db.query(TrackedProduct)
+        .options(
+            joinedload(TrackedProduct.snapshots), joinedload(TrackedProduct.ai_insights)
+        )
+        .filter(TrackedProduct.id == product_id)
+        .first()
+    )
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    clean_url = product.url.split("?")[0].split("#")[0]
+    snaps = sorted(product.snapshots, key=lambda s: s.fetched_at)
 
-    snaps = (
-        db.query(PriceSnapshot)
-        .join(TrackedProduct, PriceSnapshot.tracked_product_id == TrackedProduct.id)
-        .filter(TrackedProduct.url.like(f"{clean_url}%"))
-        .order_by(PriceSnapshot.fetched_at.asc())
-        .all()
-    )
     history = [
         PricePoint(
             price=float(s.price) if s.price is not None else None,
@@ -161,12 +193,9 @@ def get_product_detail(product_id: int, db: Session = Depends(get_db)):
     min_price = min(prices) if prices else None
     max_price = max(prices) if prices else None
 
-    ai_latest = (
-        db.query(AIInsight)
-        .filter(AIInsight.product_id == product.id)
-        .order_by(AIInsight.created_at.desc())
-        .first()
-    )
+    ai_latest = None
+    if product.ai_insights:
+        ai_latest = max(product.ai_insights, key=lambda x: x.created_at)
 
     ai_obj = None
     if ai_latest:
@@ -202,6 +231,8 @@ def get_product_detail(product_id: int, db: Session = Depends(get_db)):
         max_price=max_price,
         history=history,
         ai_latest=ai_obj,
+        last_scrape_time=product.last_scraped_at,
+        next_run_at=product.next_run_at,
     )
 
 
@@ -212,12 +243,69 @@ def deactivate_product(product_id: int, db: Session = Depends(get_db)):
         .filter(TrackedProduct.id == product_id, TrackedProduct.is_active == True)
         .first()
     )
+
     if not product:
         raise HTTPException(
             status_code=404, detail="Product not found or already inactive"
         )
 
     product.is_active = False
-    db.add(product)
     db.commit()
+
     return {"status": "success", "id": product_id}
+
+
+@router.patch("/products/{product_id}/interval")
+def update_product_interval(
+    product_id: int,
+    update_interval: int = Body(..., ge=1, le=24, embed=True),
+    db: Session = Depends(get_db),
+):
+    product = db.query(TrackedProduct).filter(TrackedProduct.id == product_id).first()
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    def ensure_utc(dt):
+        """Convert naive datetime to UTC-aware"""
+        if dt is None:
+            return None
+        if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    if product.last_scraped_at and product.next_run_at:
+        now = datetime.now(timezone.utc)
+        next_run = ensure_utc(product.next_run_at)
+
+        time_remaining = (next_run - now).total_seconds() / 3600  # hours
+
+        if 0 < time_remaining < update_interval:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot set interval to {update_interval}h. "
+                f"Next snapshot is in {time_remaining:.1f}h. "
+                f"Please wait for the next snapshot or choose a shorter interval.",
+            )
+
+    old_interval = product.update_interval
+    product.update_interval = update_interval
+
+    if product.last_scraped_at:
+        last_scraped = ensure_utc(product.last_scraped_at)
+        product.next_run_at = last_scraped + timedelta(hours=update_interval)
+    else:
+        product.next_run_at = datetime.now(timezone.utc) + timedelta(
+            hours=update_interval
+        )
+
+    db.commit()
+    db.refresh(product)
+
+    return {
+        "status": "success",
+        "id": product_id,
+        "old_interval": old_interval,
+        "new_interval": product.update_interval,
+        "next_run_at": product.next_run_at.isoformat() if product.next_run_at else None,
+    }

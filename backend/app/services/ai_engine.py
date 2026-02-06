@@ -21,7 +21,6 @@ class AIResult:
     suggested_alert_price: Optional[float]
     explanation: str
 
-    # features
     snapshot_count: int
     window_days: int
     last_price: Optional[float]
@@ -63,10 +62,6 @@ def _std(xs: List[float]) -> Optional[float]:
 
 
 def _linear_slope(prices: List[float]) -> Optional[float]:
-    """
-    Simple least-squares slope for equally spaced points.
-    x = 0..n-1
-    """
     n = len(prices)
     if n < 2:
         return 0.0
@@ -90,14 +85,6 @@ def _pct_change(old: Optional[float], new: Optional[float]) -> Optional[float]:
 
 
 class AIEngine:
-    """
-    AI Engine v1 (no LLM):
-    - trend detection using slope + pct changes
-    - anomaly detection using z-score / sudden drop/spike
-    - recommendation based on min/avg distance + trend
-    - quite primitive, mainly rule-based with statistical features
-    - can be extended later with more advanced techniques
-    """
 
     def __init__(self, window_days: int = 30):
         self.window_days = window_days
@@ -107,7 +94,7 @@ class AIEngine:
         if not product:
             raise ValueError(f"Product {product_id} not found")
 
-        since = datetime.utcnow() - timedelta(days=self.window_days)
+        since = datetime.now(timezone.utc) - timedelta(days=self.window_days)
 
         q = (
             select(PriceSnapshot)
@@ -154,7 +141,6 @@ class AIEngine:
 
         slope = _linear_slope(prices)
 
-        # pct change windows: use nearest index approximations
         pct_change_7d = None
         pct_change_30d = None
 
@@ -164,7 +150,7 @@ class AIEngine:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
 
-            # find first snapshot at/after dt
+
             for s in snaps:
                 if s.price is None:
                     continue
@@ -172,7 +158,7 @@ class AIEngine:
                     v = _safe_float(s.price)
                     if v is not None:
                         return v
-            # fallback to earliest
+
             for s in snaps:
                 v = _safe_float(s.price)
                 if v is not None:
@@ -185,9 +171,6 @@ class AIEngine:
         pct_change_7d = _pct_change(p7, last_price)
         pct_change_30d = _pct_change(p30, last_price)
 
-        # -------------------------
-        # Trend classification
-        # -------------------------
         trend = "flat"
         if slope is None:
             trend = "unknown"
@@ -203,9 +186,6 @@ class AIEngine:
             else:
                 trend = "flat"
 
-        # -------------------------
-        # Anomaly detection
-        # -------------------------
         anomaly = "none"
         if std is not None and std > 0 and avg_price is not None:
             z = (last_price - avg_price) / std
@@ -218,9 +198,6 @@ class AIEngine:
             if anomaly == "none":
                 anomaly = "volatile"
 
-        # -------------------------
-        # Recommendation
-        # -------------------------
         recommendation = "watch"
         confidence = 0.5
 
@@ -254,9 +231,6 @@ class AIEngine:
                 recommendation = "watch"
                 confidence = 0.55
 
-        # -------------------------
-        # Explanation Assembly
-        # -------------------------
         explanation_parts = []
         explanation_parts.append(f"Trend: {trend}.")
 

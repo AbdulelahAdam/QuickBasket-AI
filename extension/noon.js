@@ -1,17 +1,9 @@
-/**
- * QuickBasket AI - Noon Content Script (On-Demand)
- */
-
 (function () {
   "use strict";
 
   console.log("[QB Noon] Content script loaded - on-demand mode");
 
   let scriptsInjected = false;
-
-  // ==========================================
-  // SCRIPT INJECTION (Only when needed)
-  // ==========================================
 
   async function injectScripts() {
     if (scriptsInjected) {
@@ -56,13 +48,6 @@
     });
   }
 
-  // ==========================================
-  // PRODUCT EXTRACTION (On-Demand)
-  // ==========================================
-
-  /**
-   * Request product extraction from injected script
-   */
   async function requestProductExtraction() {
     const injected = await injectScripts();
     if (!injected) {
@@ -108,17 +93,18 @@
     });
   }
 
-  // ==========================================
-  // MESSAGE HANDLING FROM POPUP
-  // ==========================================
-
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("[QB Noon] Received message:", message.action);
+
+    if (message.action === "ping") {
+      sendResponse({ status: "ok" });
+      return false;
+    }
 
     if (message.action === "extractProduct") {
       requestProductExtraction()
         .then((product) => {
-          console.log("[QB Noon] Sending product to popup");
+          console.log("[QB Noon] Sending product data back");
           sendResponse({ success: true, product });
         })
         .catch((error) => {
@@ -129,7 +115,7 @@
           });
         });
 
-      return true; // Async response
+      return true;
     }
 
     sendResponse({ success: false, error: "Unknown action" });

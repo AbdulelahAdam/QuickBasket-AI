@@ -28,7 +28,7 @@ async def monitor_one(db: Session, product: TrackedProduct):
     price_dec = parse_price_to_decimal(price_raw)
     price_value = float(price_dec) if price_dec is not None else None
 
-    # last snapshot
+
     last = (
         db.query(PriceSnapshot)
         .filter(PriceSnapshot.tracked_product_id == product.id)
@@ -46,13 +46,13 @@ async def monitor_one(db: Session, product: TrackedProduct):
     )
     db.add(snap)
 
-    # update product title/image if changed
+
     product.title = title
     if data.get("image_url"):
         product.image_url = data["image_url"]
     db.add(product)
 
-    # event detection
+
     if last and last.price is not None and price_value is not None:
         old = float(last.price)
         new = price_value
@@ -78,5 +78,5 @@ async def run_monitor_cycle(db: Session):
         try:
             await monitor_one(db, p)
         except Exception as e:
-            # keep cycle alive
+
             print(f"[monitor] failed for {p.id}: {e}")

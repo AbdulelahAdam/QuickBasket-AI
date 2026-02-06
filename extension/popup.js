@@ -1,17 +1,15 @@
-/**
- * QuickBasket AI - Popup Script
- */
+
 
 (function () {
   "use strict";
 
-  // Config
+
   const CONFIG = {
     PRICE_DECIMALS: 2,
     MAX_NAME_LENGTH: 100,
   };
 
-  // Cached DOM elements
+
   const elements = {
     trackBtn: null,
     btnText: null,
@@ -23,14 +21,14 @@
     openDashboard: null,
   };
 
-  // State
+
   let currentProduct = null;
   let currentTab = null;
   let isTracked = false;
 
-  // ==========================================
-  // UTILITY FUNCTIONS
-  // ==========================================
+
+
+
 
   async function getCurrentTab() {
     try {
@@ -88,9 +86,9 @@
     return `${escapeHtml(currency)} ${numPrice.toFixed(CONFIG.PRICE_DECIMALS)}`;
   }
 
-  // ==========================================
-  // UI FUNCTIONS
-  // ==========================================
+
+
+
 
   function showStatus(message, type = "success") {
     if (!elements.status) return;
@@ -98,10 +96,10 @@
     elements.status.textContent = message;
     elements.status.className = `status ${type} show`;
 
-    // Don't auto-hide - let user see it
+
     setTimeout(() => {
       elements.status.classList.remove("show");
-    }, 5000); // Longer duration
+    }, 5000);
   }
 
   function setButtonState(state) {
@@ -116,7 +114,7 @@
 
       case "tracked":
         elements.trackBtn.disabled = false;
-        elements.btnText.textContent = "Tracked ✓";
+        elements.btnText.textContent = "Tracked ";
         elements.trackBtn.style.background =
           "linear-gradient(135deg, 059669 0%, 047857 100%)";
         break;
@@ -144,7 +142,7 @@
       elements.productName.textContent = name;
       elements.productPrice.textContent = price;
 
-      // Show product image if available
+
       if (product.image && elements.productImage) {
         elements.productImage.src = product.image;
         elements.productImage.style.display = "block";
@@ -164,9 +162,9 @@
     }
   }
 
-  // ==========================================
-  // INITIALIZATION
-  // ==========================================
+
+
+
 
   function initElements() {
     elements.trackBtn = document.getElementById("trackBtn");
@@ -213,13 +211,13 @@
     setButtonState("ready");
   }
 
-  // ==========================================
-  // EVENT HANDLERS
-  // ==========================================
+
+
+
 
   async function handleTrackClick() {
     if (isTracked) {
-      // Already tracked - just show message
+
       showStatus("This product is already being tracked!", "success");
       return;
     }
@@ -237,7 +235,7 @@
 
       console.log("[QB Popup] Requesting product extraction...");
 
-      // Add timeout for extraction request
+
       const extractPromise = chrome.tabs.sendMessage(currentTab.id, {
         action: "extractProduct",
       });
@@ -272,10 +270,10 @@
       const product = extractResponse.product;
       console.log("[QB Popup] Product extracted:", product);
 
-      // Display the extracted product (STAYS VISIBLE)
+
       displayProduct(product);
 
-      // Send to background for tracking
+
       console.log("[QB Popup] Sending to background for storage...");
       const trackResponse = await chrome.runtime.sendMessage({
         action: "trackProduct",
@@ -290,7 +288,7 @@
       if (trackResponse?.success) {
         isTracked = true;
         setButtonState("tracked");
-        showStatus("Product tracked successfully! ✓", "success");
+        showStatus("Product tracked successfully! ", "success");
         if (trackResponse?.success) {
           isTracked = true;
           setButtonState("tracked");
@@ -303,7 +301,7 @@
           if (aiSummary) {
             showStatus(`AI: ${aiSummary}`, "success");
           } else {
-            showStatus("Product tracked successfully! ✓", "success");
+            showStatus("Product tracked successfully! ", "success");
           }
           console.log("[QB Popup] Product tracked successfully");
         } else {
@@ -347,9 +345,9 @@
     }
   }
 
-  // ==========================================
-  // STARTUP
-  // ==========================================
+
+
+
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

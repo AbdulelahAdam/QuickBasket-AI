@@ -1,4 +1,14 @@
-from sqlalchemy import String, DateTime, func, Boolean, ForeignKey, Text
+from sqlalchemy import (
+    String,
+    func,
+    DateTime,
+    Boolean,
+    ForeignKey,
+    Text,
+    Integer,
+    Column,
+)
+from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -13,7 +23,7 @@ class TrackedProduct(Base):
     )
 
     marketplace: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
-    url: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     canonical_url: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
 
     external_id: Mapped[str | None] = mapped_column(
@@ -27,6 +37,9 @@ class TrackedProduct(Base):
         Boolean, nullable=False, server_default="true"
     )
 
+    last_availability: Mapped[str] = mapped_column(
+        String(32), default="in_stock", nullable=False
+    )
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -37,7 +50,10 @@ class TrackedProduct(Base):
         nullable=False,
     )
 
-    # Relationships
+    update_interval = Column(Integer, default=24)
+    last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     snapshots = relationship(
         "PriceSnapshot", back_populates="product", cascade="all, delete-orphan"
     )

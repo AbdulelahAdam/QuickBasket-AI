@@ -54,6 +54,22 @@
             }
         }
 
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .sync-spinner {
+            display: inline-block;
+            font-size: 10px;
+        }
+
+
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -386,6 +402,44 @@
             gap: 8px;
         }
 
+        .interval-container {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(59, 130, 246, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .interval-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .interval-select {
+            background: rgba(10, 14, 39, 0.6);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 12px;
+            padding: 4px 8px;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .interval-select:hover {
+            border-color: #3b82f6;
+        }
+
+        .interval-select option {
+            background: #1a1f3a;
+            color: #e2e8f0;
+        }
+
+
         .action-btn {
             flex: 1;
             padding: 10px;
@@ -420,7 +474,7 @@
         }
 
         .action-btn-danger:hover {
-            background: rgba(239, 68, 68, 0.1);
+            background-color: #7f1d1d !important;
             border-color: #f87171;
         }
 
@@ -446,6 +500,69 @@
             outline-offset: 2px;
         }
 
+        .card-footer {
+            margin-top: 15px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(59, 130, 246, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .interval-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn-sm {
+            flex: 1;
+            padding: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
+            border: none;
+        }
+
+        .btn-details {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-details:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-remove {
+            background: rgba(239, 68, 68, 0.05);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.15);
+        }
+
+        .btn-remove:hover {
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        .modern-select:hover {
+            border-color: #3b82f6 !important;
+        }
+
+        .modern-select:focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
 
         .empty-state {
             text-align: center;
@@ -506,7 +623,21 @@
 
 <body>
     <div class="animated-bg" aria-hidden="true"></div>
-
+    <!-- <button id="testScrapeBtn" style="
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 10px 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        z-index: 1000;
+        ">
+        Test Scrape Now
+    </button> -->
     <div class="container">
         <header class="header">
             <div class="brand">

@@ -18,7 +18,10 @@ class DashboardProductOut(BaseModel):
     tracked_days: int
     snapshots: int
     last_updated: Optional[datetime] = None
+    next_run_at: Optional[datetime] = None
     change_24h: Optional[float] = None
+    update_interval: int | None = None
+    last_availability: str = "in_stock"
 
 
 class PricePoint(BaseModel):
@@ -40,3 +43,6 @@ class ProductDetailOut(BaseModel):
 
     history: list[PricePoint]
     ai_latest: Optional[dict] = None
+
+    last_scrape_time: datetime | None = None
+    next_run_at: datetime | None = None

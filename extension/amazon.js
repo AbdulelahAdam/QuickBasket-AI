@@ -1,18 +1,9 @@
-/**
- * QuickBasket AI - Amazon Content Script (On-Demand)
- * CHANGED: Only injects and extracts when user clicks "Track Product"
- */
-
 (function () {
   "use strict";
 
   console.log("[QB Amazon] Content script loaded - on-demand mode");
 
   let scriptsInjected = false;
-
-  // ==========================================
-  // SCRIPT INJECTION (Only when needed)
-  // ==========================================
 
   async function injectScripts() {
     if (scriptsInjected) {
@@ -57,21 +48,12 @@
     });
   }
 
-  // ==========================================
-  // PRODUCT EXTRACTION (On-Demand)
-  // ==========================================
-
-  /**
-   * Request product extraction from injected script
-   */
   async function requestProductExtraction() {
-    // Ensure scripts are injected first
     const injected = await injectScripts();
     if (!injected) {
       throw new Error("Failed to inject extraction scripts");
     }
 
-    // Wait a bit for scripts to initialize
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     return new Promise((resolve, reject) => {
@@ -101,7 +83,6 @@
 
       window.addEventListener("message", messageHandler);
 
-      // Request extraction from injected script
       window.postMessage(
         {
           source: "quickbasket-content-amazon",
@@ -112,33 +93,24 @@
     });
   }
 
-  // ==========================================
-  // MESSAGE HANDLING FROM POPUP
-  // ==========================================
-
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log("[QB Amazon] Received message:", message.action);
+    console.log(`[QB] Received message:`, message.action);
+
+    if (message.action === "ping") {
+      sendResponse({ status: "ok" });
+      return false;
+    }
 
     if (message.action === "extractProduct") {
-      // User clicked "Track Product" - extract now
       requestProductExtraction()
         .then((product) => {
-          console.log("[QB Amazon] Sending product to popup");
           sendResponse({ success: true, product });
         })
         .catch((error) => {
-          console.error("[QB Amazon] Extraction failed:", error);
-          sendResponse({
-            success: false,
-            error: error.message || "Could not extract product data",
-          });
+          sendResponse({ success: false, error: error.message });
         });
-
-      return true; // Async response
+      return true; // Keep channel open for async extraction
     }
-
-    sendResponse({ success: false, error: "Unknown action" });
-    return false;
   });
 
   console.log("[QB Amazon] Ready - waiting for user action");
