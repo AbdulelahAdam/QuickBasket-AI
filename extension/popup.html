@@ -4,290 +4,103 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="QuickBasket AI - Track prices across marketplaces">
     <title>QuickBasket AI</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            width: 320px;
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
-            color: #e2e8f0;
-            position: relative;
-            overflow: hidden;
-        }
-
-        /* Animated background */
-        .bg-blur {
-            position: absolute;
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
-            pointer-events: none;
-            will-change: transform;
-        }
-
-        .blur-1 {
-            top: -50px;
-            right: -50px;
-            animation: float 10s infinite ease-in-out;
-        }
-
-        .blur-2 {
-            bottom: -50px;
-            left: -50px;
-            animation: float 15s infinite ease-in-out reverse;
-        }
-
-        @keyframes float {
-
-            0%,
-            100% {
-                transform: translate(0, 0);
-            }
-
-            50% {
-                transform: translate(20px, -20px);
-            }
-        }
-
-        .container {
-            position: relative;
-            z-index: 10;
-            padding: 20px;
-        }
-
-        .header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 16px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .logo {
-            width: 32px;
-            height: 32px;
-            filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
-        }
-
-        .brand-name {
-            font-size: 16px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .content {
-            margin-bottom: 20px;
-        }
-
-        .title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #cbd5e1;
-            margin-bottom: 12px;
-            line-height: 1.5;
-        }
-
-        .product-info {
-            background: linear-gradient(135deg, rgba(20, 24, 41, 0.6), rgba(30, 40, 70, 0.4));
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 16px;
-            backdrop-filter: blur(10px);
-        }
-
-        .product-name {
-            font-size: 13px;
-            color: #e2e8f0;
-            margin-bottom: 6px;
-            font-weight: 500;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            line-height: 1.4;
-        }
-
-        .product-price {
-            font-size: 18px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .btn-track {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn-track::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s ease;
-        }
-
-        .btn-track:hover::before {
-            left: 100%;
-        }
-
-        .btn-track:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
-        }
-
-        .btn-track:active:not(:disabled) {
-            transform: translateY(0);
-        }
-
-        .btn-track:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .status {
-            margin-top: 12px;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 13px;
-            text-align: center;
-            font-weight: 500;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .status.show {
-            opacity: 1;
-        }
-
-        .status.success {
-            background: rgba(34, 197, 94, 0.15);
-            color: #4ade80;
-            border: 1px solid rgba(34, 197, 94, 0.3);
-        }
-
-        .status.error {
-            background: rgba(239, 68, 68, 0.15);
-            color: #f87171;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
-        .footer {
-            text-align: center;
-            padding-top: 12px;
-            border-top: 1px solid rgba(59, 130, 246, 0.1);
-        }
-
-        .footer-link {
-            color: #3b82f6;
-            text-decoration: none;
-            font-size: 12px;
-            transition: color 0.3s ease;
-        }
-
-        .footer-link:hover {
-            color: #60a5fa;
-        }
-
-        .footer-link:focus {
-            outline: 2px solid #3b82f6;
-            outline-offset: 2px;
-        }
-
-        .loading {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-left: 8px;
-            vertical-align: middle;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        /* Reduced motion support */
-        @media (prefers-reduced-motion: reduce) {
-
-            *,
-            *::before,
-            *::after {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="popup-styles.css">
 </head>
 
 <body>
-    <div class="bg-blur blur-1" aria-hidden="true"></div>
-    <div class="bg-blur blur-2" aria-hidden="true"></div>
-
-    <div class="container">
-        <header class="header">
-            <img src="icons/icon48.png" alt="QuickBasket AI logo" class="logo" width="32" height="32">
-            <h1 class="brand-name">QuickBasket AI</h1>
-        </header>
-
-        <main class="content">
-            <p class="title">Track prices across marketplaces</p>
-
-            <div class="product-info" id="productInfo" style="display: none;" role="region"
-                aria-label="Product information">
-                <img id="productImage" alt="Product"
-                    style="display: none; width: 100%; max-height: 150px; object-fit: contain; margin-bottom: 12px; border-radius: 6px;">
-                <div class="product-name" id="productName">Product name will appear here</div>
-                <div class="product-price" id="productPrice">$0.00</div>
-            </div>
-
-            <button class="btn-track" id="trackBtn" aria-label="Track this product">
-                <span id="btnText">Track This Product</span>
-            </button>
-
-            <div class="status" id="status" role="status" aria-live="polite"></div>
-        </main>
-
-        <footer class="footer">
-            <a href="#" class="footer-link" id="openDashboard" role="button">View Dashboard</a>
-        </footer>
+    <div id="debugOverlay"
+        style="position: fixed; top: 0; left: 0; right: 0; background: #000; color: #0f0; font-family: monospace; font-size: 10px; padding: 4px; z-index: 999999; max-height: 100px; overflow-y: auto; display: none;">
     </div>
 
+    <div class="popup-container">
+        <div class="auth-screen" id="authScreen">
+            <div class="auth-header">
+                <img src="icons/icon48.png" alt="QuickBasket AI" class="auth-logo">
+                <h1 class="auth-title">QuickBasket AI</h1>
+                <p class="auth-subtitle">Smart price tracking for savvy shoppers</p>
+            </div>
+
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="loginTab">Login</button>
+                <button class="auth-tab" id="registerTab">Register</button>
+            </div>
+
+            <form class="auth-form" id="authForm">
+                <div class="form-group">
+                    <label for="emailInput" class="form-label">Email</label>
+                    <input type="email" id="emailInput" class="form-input" placeholder="you@example.com"
+                        autocomplete="email" required>
+                    <span class="form-error" id="emailError"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="passwordInput" class="form-label">Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="passwordInput" class="form-input" placeholder="Enter your password"
+                            autocomplete="current-password" required>
+                        <button type="button" class="password-toggle" id="passwordToggle">
+                        </button>
+                    </div>
+                    <span class="form-error" id="passwordError"></span>
+                    <div class="password-strength" id="passwordStrength"></div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="submitBtn">
+                    <span class="btn-text" id="submitBtnText">Login</span>
+                    <span class="btn-loader" id="submitLoader"></span>
+                </button>
+
+                <div class="auth-footer">
+                    <a href="#" class="auth-link" id="forgotPassword">Forgot password?</a>
+                </div>
+            </form>
+
+            <div class="auth-message" id="authMessage"></div>
+        </div>
+
+        <div class="main-screen" id="mainScreen">
+            <div class="main-header">
+                <div class="user-badge">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div class="user-info">
+                        <span class="user-email" id="userEmail"></span>
+                        <a href="#" class="logout-link" id="logoutBtn">Logout</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <h2 class="content-title">Track this product</h2>
+
+                <div class="product-preview" id="productPreview">
+                    <div class="preview-skeleton" id="previewSkeleton">
+                        <div class="skeleton-image"></div>
+                        <div class="skeleton-text"></div>
+                        <div class="skeleton-price"></div>
+                    </div>
+                    <div class="preview-content" id="previewContent" style="display: none;">
+                        <img id="productImage" alt="Product" class="preview-image">
+                        <h3 id="productName" class="preview-name"></h3>
+                        <p id="productPrice" class="preview-price"></p>
+                    </div>
+                </div>
+
+                <button class="btn-track" id="trackBtn">
+                    <span id="trackBtnText">Track This Product</span>
+                </button>
+
+                <div class="status-message" id="statusMessage"></div>
+            </div>
+
+            <div class="main-footer">
+                <a href="#" class="footer-link" id="dashboardLink">View Dashboard</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="extension-config.js"></script>
+    <script src="auth.js"></script>
     <script src="popup.js"></script>
 </body>
 

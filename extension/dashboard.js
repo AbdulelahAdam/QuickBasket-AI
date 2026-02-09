@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  console.log("[QB Dashboard] Initializing (optimized)...");
+  console.log("[QB Dashboard] Initializing.");
 
   const CONFIG = {
     PRICE_DECIMALS: 2,
@@ -10,10 +10,13 @@
     CACHE_TTL_MS: 30000,
     REFRESH_INTERVAL_MS: 30000,
     DEBOUNCE_DELAY_MS: 300,
+    API_TIMEOUT_MS: 30000,
+    RECONNECT_CHECK_INTERVAL: 5000,
   };
 
   const QB = self.QB_CONFIG || null;
-  const API_BASE = QB?.API?.BASE_URL || "http://127.0.0.1:8000";
+  const API_BASE =
+    EXT_CONFIG?.API_BASE_URL || QB?.API?.BASE_URL || "http://127.0.0.1:8000";
 
   const API = {
     DASHBOARD_PRODUCTS: `${API_BASE}/dashboard/products`,
@@ -23,6 +26,7 @@
     }`,
     AI_COMPUTE: (id) => `${API_BASE}/api/v1/ai/products/${id}/insight`,
     AI_LATEST: (id) => `${API_BASE}/api/v1/ai/products/${id}/insight/latest`,
+    PRODUCT_INTERVAL: (id) => `${API_BASE}/dashboard/products/${id}/interval`,
   };
 
   let state = {
@@ -35,14 +39,19 @@
     activeAlerts: 0,
     displayedCount: CONFIG.PRODUCTS_PER_PAGE,
     lastUpdate: 0,
+    isOnline: navigator.onLine,
+    serverConnected: false,
   };
 
   const cache = new Map();
+  const imageCache = new Map();
+  const IMAGE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const abortControllers = new Map();
+  let reconnectInterval = null;
 
   function getCached(key) {
     const cached = cache.get(key);
     if (cached && Date.now() - cached.timestamp < CONFIG.CACHE_TTL_MS) {
-      console.log(`[QB Dashboard] Cache hit: ${key}`);
       return cached.data;
     }
     cache.delete(key);
@@ -51,11 +60,35 @@
 
   function setCache(key, data) {
     cache.set(key, { data, timestamp: Date.now() });
-
     if (cache.size > 20) {
       const firstKey = cache.keys().next().value;
       cache.delete(firstKey);
     }
+  }
+
+  function getCachedImage(productId) {
+    const item = imageCache.get(productId);
+    if (!item) return null;
+    const isExpired = Date.now() - item.timestamp > IMAGE_CACHE_TTL_MS;
+    if (isExpired) {
+      imageCache.delete(productId);
+      return null;
+    }
+    return item.url;
+  }
+
+  function setCachedImage(productId, imageUrl) {
+    if (imageUrl) {
+      imageCache.set(productId, { url: imageUrl, timestamp: Date.now() });
+    }
+  }
+
+  const elements = {};
+  function el(id) {
+    if (!elements[id]) {
+      elements[id] = document.getElementById(id);
+    }
+    return elements[id];
   }
 
   const tempDiv = document.createElement("div");
@@ -82,17 +115,18 @@
 
   function marketplaceName(m) {
     const x = (m || "").toLowerCase();
-    if (x === "amazon") return "Amazon";
-    if (x === "noon") return "Noon";
-    return x || "Unknown";
-  }
-
-  const elements = {};
-  function el(id) {
-    if (!elements[id]) {
-      elements[id] = document.getElementById(id);
-    }
-    return elements[id];
+    const names = {
+      amazon: "Amazon",
+      noon: "Noon",
+      alibaba: "Alibaba",
+      aliexpress: "AliExpress",
+      shein: "Shein",
+      ebay: "eBay",
+      jumia: "Jumia",
+      nike: "Nike",
+      adidas: "Adidas",
+    };
+    return names[x] || x || "Unknown";
   }
 
   function timeAgo(date) {
@@ -103,44 +137,191 @@
     return `${Math.floor(mins / 60)}h ago`;
   }
 
+  function updateConnectionUI(isConnected) {
+    const dot = el("connectionDot");
+    const text = el("connectionText");
+    const banner = el("offlineBanner");
+
+    if (!dot || !text) return;
+
+    if (isConnected) {
+      dot.className = "qb-status-dot status-online";
+      text.textContent = "Session Active";
+      text.style.color = "#10b981";
+      if (banner) banner.classList.remove("show");
+      state.serverConnected = true;
+    } else {
+      dot.className = "qb-status-dot status-offline";
+      text.textContent = "Connection Lost";
+      text.style.color = "#ef4444";
+      if (banner) banner.classList.add("show");
+      state.serverConnected = false;
+    }
+  }
+
+  function startReconnectMonitor() {
+    if (reconnectInterval) return;
+
+    reconnectInterval = setInterval(async () => {
+      if (state.serverConnected) {
+        stopReconnectMonitor();
+        return;
+      }
+
+      if (!navigator.onLine) {
+        return;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+
+        const response = await fetch(`${API_BASE}/health`, {
+          signal: controller.signal,
+          method: "HEAD",
+          cache: "no-store",
+        });
+
+        clearTimeout(timeout);
+
+        if (response.ok && response.status === 200) {
+          console.log("[Dashboard] Connection restored");
+          updateConnectionUI(true);
+          stopReconnectMonitor();
+          setTimeout(() => refreshDashboard(false), 500);
+        }
+      } catch (error) {
+        // should stay silent
+      }
+    }, CONFIG.RECONNECT_CHECK_INTERVAL);
+  }
+
+  function stopReconnectMonitor() {
+    if (reconnectInterval) {
+      clearInterval(reconnectInterval);
+      reconnectInterval = null;
+    }
+  }
+
+  window.addEventListener("online", () => {
+    console.log("[Dashboard] Browser online event");
+    state.isOnline = true;
+    if (!state.serverConnected) {
+      startReconnectMonitor();
+    }
+  });
+
+  window.addEventListener("offline", () => {
+    console.log("[Dashboard] Browser offline event");
+    state.isOnline = false;
+    updateConnectionUI(false);
+    stopReconnectMonitor();
+  });
+
   async function apiFetch(url, opts = {}) {
+    if (!navigator.onLine) {
+      throw new Error("CONNECTION_LOST");
+    }
+
     const cacheKey = opts.method === "GET" || !opts.method ? url : null;
     if (cacheKey) {
       const cached = getCached(cacheKey);
       if (cached) return cached;
     }
 
+    if (abortControllers.has(url)) {
+      return;
+    }
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    abortControllers.set(url, controller);
+    const timeout = setTimeout(() => controller.abort(), CONFIG.API_TIMEOUT_MS);
 
     try {
+      const authHeader = authService?.getAuthHeader
+        ? authService.getAuthHeader()
+        : null;
+
       const res = await fetch(url, {
         ...opts,
         signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
+          ...(authHeader ? { Authorization: authHeader } : {}),
           ...(opts.headers || {}),
         },
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`${res.status} ${res.statusText} ${text}`);
+      if (res.status >= 500) {
+        if (state.serverConnected) {
+          updateConnectionUI(false);
+          startReconnectMonitor();
+        }
+        // Silent.
+        return null;
       }
 
-      const contentType = res.headers.get("content-type") || "";
-      const data = contentType.includes("application/json")
+      if (!res.ok) {
+        if (res.status === 401 && authService?.refreshSession) {
+          await authService.refreshSession();
+          throw new Error("Session expired");
+        }
+
+        if (res.status >= 400 && res.status < 500) {
+          throw new Error(`Client error: ${res.status}`);
+        }
+
+        throw new Error("CONNECTION_LOST");
+      }
+
+      if (!state.serverConnected && res.status >= 200 && res.status < 300) {
+        updateConnectionUI(true);
+        stopReconnectMonitor();
+      }
+
+      const data = (res.headers.get("content-type") || "").includes(
+        "application/json"
+      )
         ? await res.json()
         : await res.text();
 
-      if (cacheKey && data) {
-        setCache(cacheKey, data);
-      }
-
+      if (cacheKey && data) setCache(cacheKey, data);
       return data;
+    } catch (error) {
+      if (
+        error.name === "AbortError" ||
+        error.message.includes("Failed to fetch") ||
+        error.message.includes("NetworkError") ||
+        error.message.includes("Load failed")
+      ) {
+        if (state.serverConnected) {
+          updateConnectionUI(false);
+          startReconnectMonitor();
+        }
+        throw new Error("CONNECTION_LOST");
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
+      abortControllers.delete(url);
     }
+  }
+
+  function showLoadingSkeletons() {
+    const grid = el("productsGrid");
+    if (!grid) return;
+
+    const skeletonHTML = `
+      <div class="skeleton-card">
+        <div class="skeleton-image"></div>
+        <div class="skeleton-text"></div>
+        <div class="skeleton-text short"></div>
+        <div class="skeleton-price"></div>
+        <div class="skeleton-text"></div>
+      </div>
+    `.repeat(6);
+
+    grid.innerHTML = skeletonHTML;
   }
 
   async function loadProductsFromBackend() {
@@ -151,18 +332,20 @@
 
     rows.forEach((p) => {
       const cleanUrl = p.url.split("?")[0].split("#")[0].toLowerCase().trim();
+      const cachedImage = getCachedImage(p.id);
+      const imageUrl = cachedImage || p.image_url || null;
 
       if (!uniqueMap.has(cleanUrl)) {
         uniqueMap.set(cleanUrl, {
           id: p.id,
           name: p.title || "Untitled Product",
           marketplace: (p.marketplace || "").toLowerCase(),
-          currency: p.currency || "EGP",
+          currency: p.currency || "USD",
           currentPrice: safeFloat(p.last_price),
           minPrice: safeFloat(p.min_price),
           maxPrice: safeFloat(p.max_price),
           url: p.url,
-          image: p.image_url || null,
+          image: imageUrl,
           snapshots: parseInt(p.snapshots) || 0,
           trackedDays: parseInt(p.tracked_days) || 0,
           lastUpdated: p.last_updated || null,
@@ -171,6 +354,7 @@
           update_interval: p.update_interval || 24,
           last_availability: p.last_availability || "in_stock",
         });
+        if (p.image_url) setCachedImage(p.id, p.image_url);
       } else {
         const existing = uniqueMap.get(cleanUrl);
         existing.snapshots += parseInt(p.snapshots) || 0;
@@ -181,43 +365,15 @@
           existing.change24h = safeFloat(p.change_24h);
           existing.id = String(p.id);
           existing.last_availability = p.last_availability || "in_stock";
+          if (p.image_url) {
+            existing.image = p.image_url;
+            setCachedImage(p.id, p.image_url);
+          }
         }
       }
     });
 
     return Array.from(uniqueMap.values());
-  }
-
-  function setupOfflineIndicator() {
-    const banner = document.createElement("div");
-    banner.id = "offlineBanner";
-    banner.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
-    color: white;
-    padding: 12px 20px;
-    text-align: center;
-    font-weight: 600;
-    font-size: 14px;
-    z-index: 999999;
-    display: none;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  `;
-    banner.innerHTML = "📴 You are offline. Product tracking is paused.";
-    document.body.prepend(banner);
-
-    chrome.runtime.onMessage.addListener((message) => {
-      if (message.action === "connectivityStatus") {
-        if (message.online) {
-          banner.style.display = "none";
-        } else {
-          banner.style.display = "block";
-        }
-      }
-    });
   }
 
   async function loadActiveAlertsCount() {
@@ -249,53 +405,39 @@
     const nextRun = product.nextRun ? new Date(product.nextRun) : null;
     const timeRemainingHours = nextRun ? (nextRun - now) / 3600000 : 0;
 
-    // ✅ FIX: Availability badge (if out of stock)
-    let availabilityBadge = "";
     const availability =
       product.last_availability || product.availability || "in_stock";
 
+    let availabilityBadge = "";
     if (availability === "out_of_stock") {
       availabilityBadge = `
-      <div class="product-badge badge-unavailable" style="background: #7f1d1d; border: 1px solid #991b1b; color: #fecaca;">
-        ⚠️ Out of Stock
-      </div>
-    `;
+        <div class="product-badge badge-unavailable" style="background: #7f1d1d; border: 1px solid #991b1b; color: #fecaca;">
+          Out of Stock
+        </div>
+      `;
     }
 
-    // ✅ FIX: Price change badge (restored)
     let badgeHtml = "";
     if (change !== null && current !== null && availability === "in_stock") {
       const isDown = change < 0;
       const isUp = change > 0;
 
-      let cls = "badge-stable";
-      let arrow = "•";
+      if (isDown || isUp) {
+        const cls = isDown ? "badge-down" : "badge-up";
+        const arrow = isDown ? "↓" : "↑";
+        const amount = Math.abs(change);
+        const prevPrice = current - change;
+        const pctValue = prevPrice > 0 ? (amount / prevPrice) * 100 : 0;
+        const pctStr = ` (${pctValue.toFixed(1)}%)`;
 
-      if (isDown) {
-        cls = "badge-down";
-        arrow = "↓";
-      } else if (isUp) {
-        cls = "badge-up";
-        arrow = "↑";
+        badgeHtml = `
+          <div class="product-badge ${cls}">
+            ${arrow} 24h ${formatCurrency(amount, product.currency)}${pctStr}
+          </div>
+        `;
       }
-
-      const amount = Math.abs(change);
-      const prevPrice = current - change;
-      let pctStr = " (0%)";
-
-      if (prevPrice > 0 && (isDown || isUp)) {
-        const pctValue = (amount / prevPrice) * 100;
-        pctStr = ` (${pctValue.toFixed(1)}%)`;
-      }
-
-      badgeHtml = `
-      <div class="product-badge ${cls}">
-        ${arrow} 24h ${formatCurrency(amount, product.currency)}${pctStr}
-      </div>
-    `;
     }
 
-    // ✅ Generate interval options
     const intervalOptions = [1, 6, 12, 24]
       .map((hours) => {
         const isCurrentInterval = interval === hours;
@@ -310,9 +452,9 @@
       .join("");
 
     return `
-     <div class="product-card" data-id="${escapeHtml(
-       product.id
-     )}" style="cursor:pointer;">
+      <div class="product-card" data-id="${escapeHtml(
+        product.id
+      )}" style="cursor:pointer;">
         ${availabilityBadge}
         ${badgeHtml}
         <div class="product-image">
@@ -321,7 +463,7 @@
               ? `<img src="${escapeHtml(
                   product.image
                 )}" loading="lazy" alt="${escapeHtml(product.name)}">`
-              : `<div>📦</div>`
+              : `<div></div>`
           }
         </div>
         <div class="product-marketplace">${escapeHtml(mp)}</div>
@@ -401,12 +543,6 @@
     });
   }
 
-  let renderTimeout = null;
-  function scheduleRender() {
-    if (renderTimeout) clearTimeout(renderTimeout);
-    renderTimeout = setTimeout(() => renderProducts(), 50);
-  }
-
   function renderProducts() {
     const grid = el("productsGrid");
     const emptyState = el("emptyState");
@@ -427,7 +563,6 @@
       0,
       state.displayedCount
     );
-
     grid.innerHTML = productsToRender.map(createProductCard).join("");
 
     if (state.filteredProducts.length > state.displayedCount) {
@@ -435,18 +570,13 @@
       loadMoreBtn.style.cssText =
         "grid-column: 1 / -1; text-align: center; padding: 20px;";
       loadMoreBtn.innerHTML = `
-        <button class="btn btn-primary" id="loadMoreBtn" style="padding: 12px 24px;">
+        <button class="btn btn-primary" data-action="load-more" style="padding: 12px 24px;">
           Load More (${
             state.filteredProducts.length - state.displayedCount
           } remaining)
         </button>
       `;
       grid.appendChild(loadMoreBtn);
-
-      document.getElementById("loadMoreBtn")?.addEventListener("click", () => {
-        state.displayedCount += CONFIG.PRODUCTS_PER_PAGE;
-        renderProducts();
-      });
     }
 
     grid.onchange = (e) => {
@@ -461,7 +591,10 @@
         const { action, id } = btn.dataset;
         if (action === "remove") removeProduct(id);
         else if (action === "details") openProductDetail(id);
-        return;
+        else if (action === "load-more") {
+          state.displayedCount += CONFIG.PRODUCTS_PER_PAGE;
+          renderProducts();
+        }
       }
     };
   }
@@ -469,79 +602,75 @@
   setInterval(() => {
     if (document.hidden) return;
 
-    const now = new Date();
-    const timers = document.querySelectorAll(".countdown-timer");
+    requestAnimationFrame(() => {
+      const now = new Date();
+      const timers = document.querySelectorAll(".countdown-timer");
+      const updates = [];
 
-    timers.forEach((container) => {
-      if (container.offsetParent === null) return;
+      timers.forEach((container) => {
+        if (container.offsetParent === null) return;
 
-      let nextRunStr = container.dataset.nextRun;
-      const display = container.querySelector(".timer-display");
+        let nextRunStr = container.dataset.nextRun;
+        const display = container.querySelector(".timer-display");
 
-      if (!nextRunStr || nextRunStr === "undefined" || nextRunStr === "null") {
-        if (display) display.textContent = "Not scheduled";
-        return;
-      }
-
-      if (nextRunStr.includes(".")) {
-        nextRunStr = nextRunStr.split(".")[0] + "Z";
-      }
-
-      const nextRun = new Date(nextRunStr);
-      const diff = nextRun - now;
-
-      if (isNaN(diff)) {
-        if (display) display.textContent = "Invalid Date";
-      } else if (diff <= 0) {
-        container.style.display = "flex";
-        if (display) {
-          display.textContent = "Loading...";
-          display.style.color = "#10b981";
+        if (
+          !nextRunStr ||
+          nextRunStr === "undefined" ||
+          nextRunStr === "null"
+        ) {
+          updates.push({ display, text: "Not scheduled", color: null });
+          return;
         }
-      } else {
-        container.style.display = "flex";
-        if (display) {
+
+        if (nextRunStr.includes(".")) {
+          nextRunStr = nextRunStr.split(".")[0] + "Z";
+        }
+
+        const nextRun = new Date(nextRunStr);
+        const diff = nextRun - now;
+
+        if (isNaN(diff)) {
+          updates.push({ display, text: "Invalid Date", color: null });
+        } else if (diff <= 0) {
+          updates.push({ display, text: "Loading...", color: "#10b981" });
+        } else {
           const h = Math.floor(diff / 3600000);
           const m = Math.floor((diff % 3600000) / 60000);
           const s = Math.floor((diff % 60000) / 1000);
-
           const newText = `${h}h ${String(m).padStart(2, "0")}m ${String(
             s
           ).padStart(2, "0")}s`;
-
-          if (display.textContent !== newText) {
-            display.textContent = newText;
-            display.style.color = "#3b82f6";
-          }
+          updates.push({ display, text: newText, color: "#3b82f6" });
         }
-      }
+      });
+
+      updates.forEach(({ display, text, color }) => {
+        if (display) {
+          display.textContent = text;
+          if (color) display.style.color = color;
+        }
+      });
     });
   }, 1000);
 
   setInterval(async () => {
-    if (document.hidden) return;
+    if (!navigator.onLine || !state.serverConnected || document.hidden) {
+      return;
+    }
 
     const scrapingProducts = document.querySelectorAll(
       '.timer-display[style*="color: rgb(16, 185, 129)"]'
     );
 
     if (scrapingProducts.length > 0) {
-      // console.log("[QB Dashboard] Products being scraped, refreshing...");
       await refreshDashboard(false);
     } else {
       const timeSinceLastUpdate = Date.now() - state.lastUpdate;
       if (timeSinceLastUpdate >= CONFIG.REFRESH_INTERVAL_MS) {
-        // console.log("[QB Dashboard] Auto-refresh (30s interval)");
         await refreshDashboard(false);
       }
     }
-  }, 30000);
-
-  function viewProduct(productId) {
-    const product = state.products.find((p) => p.id === productId);
-    if (!product || !product.url) return;
-    window.open(product.url, "_blank", "noopener,noreferrer");
-  }
+  }, 60000); // 1 minute - increased from 30s to minimize API calls and image reloads
 
   async function removeProduct(productId) {
     if (!confirm("Are you sure you want to stop tracking this product?"))
@@ -551,15 +680,12 @@
       await apiFetch(API.DASHBOARD_PRODUCT_DETAIL(productId), {
         method: "DELETE",
       });
-
       cache.delete(API.DASHBOARD_PRODUCTS);
-
       state.products = state.products.filter((p) => p.id !== productId);
       updateStats();
       renderProducts();
     } catch (error) {
-      console.error("[QB Dashboard] Remove error:", error);
-      alert("Failed to remove product. Please try again.");
+      alert("Failed to remove product. Please check your connection.");
     }
   }
 
@@ -574,13 +700,10 @@
       select.disabled = true;
       select.style.background = "#fbbf24";
 
-      const response = await apiFetch(
-        `${API_BASE}/dashboard/products/${productId}/interval`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ update_interval: parseInt(hours) }),
-        }
-      );
+      const response = await apiFetch(API.PRODUCT_INTERVAL(productId), {
+        method: "PATCH",
+        body: JSON.stringify({ update_interval: parseInt(hours) }),
+      });
 
       cache.delete(API.DASHBOARD_PRODUCTS);
       cache.delete(API.DASHBOARD_PRODUCT_DETAIL(productId));
@@ -613,20 +736,9 @@
         nextRunAt: response.next_run_at,
       });
     } catch (error) {
-      console.error("Failed to update interval:", error);
-
-      let errorMsg = "Could not save interval preference.";
-      if (error.message.includes("Cannot set interval")) {
-        errorMsg =
-          error.message.split('detail":"')[1]?.split('"')[0] ||
-          "Cannot change to this interval yet. Please wait for the next snapshot.";
-      }
-
-      alert(errorMsg);
-
+      alert("Could not save interval preference.");
       select.value = oldValue;
       select.style.background = "#ef4444";
-
       setTimeout(() => {
         select.disabled = false;
         select.style.background = "#0f172a";
@@ -638,7 +750,6 @@
     const totalEl = el("totalProducts");
     const savedEl = el("totalSaved");
     const dropEl = el("biggestDrop");
-    const alertsEl = el("activeAlerts");
 
     if (totalEl) totalEl.textContent = String(state.products.length);
 
@@ -647,7 +758,7 @@
     const currencyCounts = {};
 
     for (const p of state.products) {
-      const curr = p.currency || "EGP";
+      const curr = p.currency || "USD";
       currencyCounts[curr] = (currencyCounts[curr] || 0) + 1;
 
       if (p.currentPrice !== null && p.maxPrice !== null) {
@@ -662,7 +773,7 @@
       }
     }
 
-    let primaryCurrency = "EGP";
+    let primaryCurrency = "USD";
     let maxCount = -1;
     for (const [curr, count] of Object.entries(currencyCounts)) {
       if (count > maxCount) {
@@ -694,16 +805,13 @@
     }
 
     if (dropEl) dropEl.textContent = `${(biggestDrop * 100).toFixed(1)}%`;
-    if (alertsEl) alertsEl.textContent = String(state.activeAlerts || 0);
   }
 
   let detailChart = null;
 
   function ensureChartJsLoaded() {
     if (window.Chart) return Promise.resolve(true);
-    return Promise.reject(
-      new Error("Chart.js not found. Ensure vendor/chart.umd.min.js is loaded.")
-    );
+    return Promise.reject(new Error("Chart.js not found."));
   }
 
   function ensureDetailModal() {
@@ -718,16 +826,7 @@
     `;
 
     modal.innerHTML = `
-      <div style="
-        width:min(1000px, 96vw);
-        max-height:92vh;
-        overflow:auto;
-        border-radius:16px;
-        border:1px solid rgba(59,130,246,0.25);
-        background:linear-gradient(135deg, rgba(20,24,41,0.96), rgba(30,40,70,0.92));
-        backdrop-filter: blur(10px);
-        padding:18px;
-      ">
+      <div style="width:min(1000px, 96vw); max-height:92vh; overflow:auto; border-radius:16px; border:1px solid rgba(59,130,246,0.25); background:linear-gradient(135deg, rgba(20,24,41,0.96), rgba(30,40,70,0.92)); backdrop-filter: blur(10px); padding:18px;">
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:14px;">
           <div>
             <div id="qbDetailTitle" style="font-size:18px; font-weight:800; color:#e2e8f0;">Loading...</div>
@@ -738,13 +837,12 @@
             <button id="qbCloseModal" class="btn btn-primary" style="padding:8px 12px;">Close</button>
           </div>
         </div>
-
         <div style="display:grid; grid-template-columns: 1.3fr 1fr; gap:16px;">
           <div style="border:1px solid rgba(59,130,246,0.18); border-radius:12px; padding:14px; background:rgba(10,14,39,0.35);">
             <div style="font-weight:700; margin-bottom:10px;">Price History</div>
-             <div style="position: relative; height: 200px; width: 100%;">
-                <canvas id="qbPriceChart"></canvas>
-             </div>
+            <div style="position: relative; height: 200px; width: 100%;">
+              <canvas id="qbPriceChart"></canvas>
+            </div>
             <div id="qbChartEmpty" style="display:none; margin-top:10px; font-size:12px; color:#94a3b8;">
               Not enough price snapshots yet to display a chart.
             </div>
@@ -754,12 +852,9 @@
             <div id="qbAiBox" style="font-size:13px; color:#cbd5e1; line-height:1.5;">Loading insight...</div>
           </div>
         </div>
-
         <div style="margin-top:16px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
           <div id="qbNumbers" style="font-size:13px; color:#94a3b8;"></div>
-          <div>
-            <button id="qbOpenProduct" class="btn btn-primary">Open Product</button>
-          </div>
+          <div><button id="qbOpenProduct" class="btn btn-primary">Open Product</button></div>
         </div>
       </div>
     `;
@@ -775,7 +870,6 @@
     const filterContainer = document.querySelector(".filters");
     if (!filterContainer) return;
 
-    // ✅ Get unique marketplaces from products
     const marketplaces = new Set();
     state.products.forEach((product) => {
       if (product.marketplace) {
@@ -783,7 +877,6 @@
       }
     });
 
-    // ✅ Marketplace display names
     const marketplaceNames = {
       amazon: { name: "Amazon" },
       noon: { name: "Noon" },
@@ -796,7 +889,6 @@
       adidas: { name: "Adidas" },
     };
 
-    // ✅ Clear existing filter buttons (except "All" and "Price Drop")
     const existingFilters = filterContainer.querySelectorAll(".filter-btn");
     existingFilters.forEach((btn) => {
       const filter = btn.dataset.filter;
@@ -805,18 +897,15 @@
       }
     });
 
-    // ✅ Create filter buttons for existing marketplaces only
     const sortedMarketplaces = Array.from(marketplaces).sort();
 
     sortedMarketplaces.forEach((marketplace) => {
-      const config = marketplaceNames[marketplace] || {
-        name: marketplace,
-      };
+      const config = marketplaceNames[marketplace] || { name: marketplace };
 
       const btn = document.createElement("button");
       btn.className = "filter-btn";
       btn.dataset.filter = marketplace;
-      btn.innerHTML = `${config.name}`;
+      btn.textContent = config.name;
 
       btn.addEventListener("click", () => {
         document
@@ -828,7 +917,6 @@
         renderProducts();
       });
 
-      // ✅ Insert before "Price Drop" button
       const priceDropBtn = filterContainer.querySelector(
         '[data-filter="price-drop"]'
       );
@@ -839,7 +927,6 @@
       }
     });
 
-    // ✅ Re-attach listeners to "All" and "Price Drop" buttons
     const allBtn = filterContainer.querySelector('[data-filter="all"]');
     const priceDropBtn = filterContainer.querySelector(
       '[data-filter="price-drop"]'
@@ -868,10 +955,6 @@
         renderProducts();
       });
     }
-
-    // console.log(
-    //   `[QB Dashboard] Generated ${sortedMarketplaces.length} marketplace filters`
-    // );
   }
 
   function openDetailModal() {
@@ -912,7 +995,7 @@
 
       titleEl.textContent = detail.title || "Untitled Product";
       metaEl.textContent = `${marketplaceName(detail.marketplace)} · ${
-        detail.currency || "EGP"
+        detail.currency || "USD"
       }`;
 
       el("qbOpenProduct").onclick = () => {
@@ -924,9 +1007,7 @@
         aiEl.textContent = "Computing AI insight...";
         try {
           await apiFetch(API.AI_COMPUTE(productId), { method: "POST" });
-
           cache.delete(API.AI_LATEST(productId));
-
           const latest = await apiFetch(API.AI_LATEST(productId));
           renderAIInsight(aiEl, latest);
         } catch (e) {
@@ -1067,12 +1148,12 @@
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error("[QB Dashboard] Export error:", error);
       alert("Failed to export data");
     }
   }
 
   let searchTimeout = null;
+
   async function setupEventListeners() {
     const searchInput = el("searchInput");
     if (searchInput) {
@@ -1087,68 +1168,45 @@
     }
 
     await setupDynamicFilters();
-    document.querySelectorAll(".filter-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document
-          .querySelectorAll(".filter-btn")
-          .forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        state.currentFilter = btn.dataset.filter;
-        state.displayedCount = CONFIG.PRODUCTS_PER_PAGE;
-        renderProducts();
-      });
-    });
 
     const exportBtn = el("exportBtn");
     if (exportBtn) {
       exportBtn.addEventListener("click", exportData);
     }
 
-    const settingsBtn = el("settingsBtn");
-    if (settingsBtn) {
-      settingsBtn.onclick = () => refreshDashboard(true);
+    const refreshBtn = el("refreshBtn");
+    if (refreshBtn) {
+      refreshBtn.onclick = () => refreshDashboard(true);
     }
 
-    const testBtn = el("testScrapeBtn");
-    if (testBtn) {
-      testBtn.addEventListener("click", async () => {
-        testBtn.textContent = "Loading...";
-        testBtn.disabled = true;
+    const qbRefreshBtn = document.getElementById("qbRefreshBtn");
+    if (qbRefreshBtn) {
+      qbRefreshBtn.addEventListener("click", () => location.reload());
+    }
 
-        try {
-          chrome.runtime.sendMessage(
-            { action: "triggerScrapeNow" },
-            (response) => {
-              if (response && response.success) {
-                testBtn.textContent = " Scraping Finished!";
-                refreshDashboard(true);
-                setTimeout(() => {
-                  testBtn.textContent = " Test Scrape Now";
-                  testBtn.disabled = false;
-                }, 3000);
-              } else {
-                testBtn.textContent = " Failed";
-                setTimeout(() => {
-                  testBtn.textContent = " Test Scrape Now";
-                  testBtn.disabled = false;
-                }, 2000);
-              }
-            }
-          );
-        } catch (error) {
-          console.error("Error triggering scrape:", error);
-          testBtn.textContent = " Error";
-          setTimeout(() => {
-            testBtn.textContent = " Test Scrape Now";
-            testBtn.disabled = false;
-          }, 2000);
+    const logoutBtn = el("logoutBtn");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        if (!confirm("Are you sure you want to logout?")) return;
+        if (authService?.logout) {
+          await authService.logout();
         }
+        chrome.tabs.create({ url: chrome.runtime.getURL("popup.html") });
+        window.close();
       });
     }
   }
 
+  let isRefreshing = false;
+
   async function refreshDashboard(showToast = false) {
+    if (isRefreshing) return;
+    if (!navigator.onLine) return;
+    if (!state.serverConnected) return;
+
     try {
+      isRefreshing = true;
       state.loading = true;
 
       const [products, alertsCount] = await Promise.all([
@@ -1165,18 +1223,96 @@
       await setupDynamicFilters();
       renderProducts();
 
-      if (showToast) alert("Dashboard refreshed ");
-    } catch (e) {
-      console.error(e);
-      alert("Failed to load dashboard data.");
+      if (showToast) alert("Dashboard refreshed");
+    } catch (error) {
+      if (error.message === "CONNECTION_LOST") {
+        updateConnectionUI(false);
+        const grid = el("productsGrid");
+        if (grid) {
+          grid.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; background: #1e293b; border-radius: 12px; border: 1px solid #334155;">
+              <div style="background: #334155; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+                <span style="font-size: 30px;">:(</span>
+              </div>
+              <h3 style="color: white; font-size: 18px; margin-bottom: 8px;">Connection Lost</h3>
+              <p style="color: #94a3b8; font-size: 14px; max-width: 300px; margin: 0 auto 16px;">
+                Cannot reach the server. Retrying...
+              </p>
+              <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #475569; border-top-color: #3b82f6; border-radius: 50%; animation: qb-spin 0.8s linear infinite;"></div>
+            </div>
+          `;
+        }
+      } else if (error) {
+        const grid = el("productsGrid");
+        if (grid && state.products.length === 0) {
+          grid.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; background: #1e293b; border-radius: 12px; border: 1px solid #991b1b;">
+              <div style="background: #7f1d1d; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+                <span style="font-size: 30px;">:(</span>
+              </div>
+              <h3 style="color: white; font-size: 18px; margin-bottom: 8px;">Server Error</h3>
+              <p style="color: #94a3b8; font-size: 14px; max-width: 300px; margin: 0 auto 16px;">
+                The server encountered an error. Please try again in a moment.
+              </p>
+              <button class="btn btn-primary" id="qbRefreshBtn" style="margin-top: 12px;">Refresh Page</button>
+            </div>
+          `;
+        }
+      }
     } finally {
       state.loading = false;
+      isRefreshing = false;
+    }
+  }
+
+  async function checkInitialServerConnection() {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(`${API_BASE}/health`, {
+        signal: controller.signal,
+        method: "HEAD",
+        cache: "no-store",
+      });
+
+      clearTimeout(timeout);
+      return response.ok && response.status === 200;
+    } catch (error) {
+      return false;
     }
   }
 
   async function init() {
-    setupOfflineIndicator();
+    if (typeof authService !== "undefined" && authService.init) {
+      const isAuthenticated = await authService.init();
+
+      if (!isAuthenticated) {
+        chrome.action.openPopup().catch(() => {
+          chrome.tabs.create({ url: chrome.runtime.getURL("popup.html") });
+        });
+        return;
+      }
+
+      if (authService.user) {
+        const emailEl = el("userEmail");
+        if (emailEl) {
+          emailEl.textContent = authService.user.email;
+        }
+      }
+    }
+
+    showLoadingSkeletons();
+
+    const isConnected =
+      navigator.onLine && (await checkInitialServerConnection());
+    updateConnectionUI(isConnected);
+
     setupEventListeners();
+    if (!isConnected) {
+      startReconnectMonitor();
+    }
+
     await refreshDashboard(false);
   }
 
@@ -1189,5 +1325,5 @@
   window.openProductDetail = openProductDetail;
   window.updateInterval = updateInterval;
 
-  console.log("[QB Dashboard] Initialized (optimized)");
+  console.log("[Dashboard] Initialized.");
 })();

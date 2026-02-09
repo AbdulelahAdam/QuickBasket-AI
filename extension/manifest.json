@@ -44,7 +44,8 @@
     "https://*.amazon.sa/*",
     "https://*.amazon.in/*",
     "https://*.amazon.co.jp/*",
-    "https://*.noon.com/*"
+    "https://*.noon.com/*",
+    "https://*.supabase.co/*"
   ],
   "background": {
     "service_worker": "background.js"

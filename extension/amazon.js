@@ -94,8 +94,6 @@
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log(`[QB] Received message:`, message.action);
-
     if (message.action === "ping") {
       sendResponse({ status: "ok" });
       return false;
@@ -109,7 +107,7 @@
         .catch((error) => {
           sendResponse({ success: false, error: error.message });
         });
-      return true; // Keep channel open for async extraction
+      return true;
     }
   });
 

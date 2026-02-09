@@ -1,13 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import (
     GZipMiddleware,
 )
+from sqlalchemy.orm import Session
 
 from app.api.ai_routes import router as ai_router
 from app.api.dashboard import router as dashboard_router
 from app.api.routes import router as base_router
 from app.api.alerts_routes import router as alerts_router
+from app.db.session import get_db
 
 app = FastAPI(
     title="QuickBasket AI API",
@@ -40,8 +42,24 @@ app.include_router(alerts_router)
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
-    """Health check for monitoring"""
-    return {"status": "healthy", "service": "quickbasket-api"}
+    try:
+        from app.db.session import engine
+
+        with engine.connect() as connection:
+            connection.execute("SELECT 1")
+
+        return {
+            "status": "healthy",
+            "service": "quickbasket-api",
+            "database": "connected",
+        }
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "service": "quickbasket-api",
+            "database": "disconnected",
+            "error": str(e),
+        }
 
 
 @app.on_event("startup")

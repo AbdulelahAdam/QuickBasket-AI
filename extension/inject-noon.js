@@ -179,7 +179,7 @@
       "logo", // Noon logo
       "icon", // Icons
       "badge", // Badges
-      "banner", // Ad banners (THIS WAS THE BUG!)
+      "banner", // Ad banners
       "placeholder", // Placeholder images
       "avatar", // User avatars
       "sprite", // Icon sprites
@@ -204,7 +204,21 @@
   }
 
   function extractPrice() {
-    const priceEl = safeQuerySelector(SELECTORS.price);
+    const mainProductSection = document.querySelector(
+      '[data-qa="product-price"], [class*="productDetailsSection"], main'
+    );
+
+    let priceEl = null;
+    if (mainProductSection) {
+      priceEl = mainProductSection.querySelector(
+        '[data-qa="product-price"], [class*="price"]'
+      );
+    }
+
+    if (!priceEl) {
+      priceEl = document.querySelector('[data-qa="product-price"]');
+    }
+
     if (!priceEl) return null;
 
     const text = priceEl.textContent;
@@ -248,14 +262,18 @@
       return "out_of_stock";
     }
 
-    const bodyText = document.body.textContent.toLowerCase();
-    if (
-      bodyText.includes("out of stock") ||
-      bodyText.includes("currently unavailable") ||
-      bodyText.includes("not available")
-    ) {
-      console.log("[QB Noon] Found out of stock text");
-      return "out_of_stock";
+    const productSection = document.querySelector(
+      '[data-qa="productLayout"], [class*="product"], article'
+    );
+    if (productSection) {
+      const sectionText = productSection.textContent.toLowerCase();
+      if (
+        sectionText.includes("out of stock") &&
+        sectionText.indexOf("out of stock") < 2000
+      ) {
+        console.log("[QB DEBUG] Found out of stock near product controls");
+        return "out_of_stock";
+      }
     }
 
     return "in_stock";
@@ -272,22 +290,34 @@
 
     const availability = detectAvailability();
 
-    const priceData = extractPrice();
-    if (!priceData && availability === "in_stock") {
-      console.log("[QB Noon] No price found but product shows as in stock");
-      return null;
-    }
+    let price = null;
+    let currency = null;
 
-    let { price, currency } = priceData;
+    if (availability === "in_stock") {
+      const priceData = extractPrice();
+      if (!priceData) {
+        console.log(
+          "[QB Noon] Product is in stock but no price found - this is unusual"
+        );
+      } else {
+        price = priceData.price;
+        currency = priceData.currency;
 
-    if (validators.validateCurrency) {
-      currency = validators.validateCurrency(currency);
-    }
+        if (validators.validateCurrency) {
+          currency = validators.validateCurrency(currency);
+        }
 
-    if (validators.validatePriceNumber) {
-      const validatedPrice = validators.validatePriceNumber(price);
-      if (!validatedPrice) return null;
-      price = validatedPrice;
+        if (validators.validatePriceNumber) {
+          const validatedPrice = validators.validatePriceNumber(price);
+          if (!validatedPrice) return null;
+          price = validatedPrice;
+        }
+      }
+    } else {
+      currency = getCurrency();
+      if (validators.validateCurrency) {
+        currency = validators.validateCurrency(currency);
+      }
     }
 
     const image = extractProductImage();

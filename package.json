@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "chart.js": "^4.5.1"
+  },
+  "devDependencies": {
+    "supabase": "^2.75.5"
   }
 }

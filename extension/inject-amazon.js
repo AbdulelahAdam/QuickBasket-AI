@@ -285,19 +285,30 @@
 
     const offscreenPrices = document.querySelectorAll(SELECTORS.priceOffscreen);
     for (const el of offscreenPrices) {
-      price = extractPriceNumber(el.textContent);
-      if (price) return price;
-    }
+      const closestContainer = el.closest(
+        "#corePriceDisplay_desktop_feature_div, #corePrice_desktop, #buyBoxAccordion, [data-csa-c-asin]"
+      );
+      if (!closestContainer) continue;
 
-    const allPriceSpans = document.querySelectorAll(SELECTORS.priceWhole);
-    for (const span of allPriceSpans) {
-      price = combinePriceParts(span);
+      if (
+        closestContainer.closest(
+          ".a-carousel-container, #sims-consolidated-2_feature_div"
+        )
+      )
+        continue;
+
+      price = extractPriceNumber(el.textContent);
       if (price) {
-        console.log("[QB Amazon] Found fallback price:", price);
+        console.log(
+          "[QB Amazon] Found offscreen price from main product:",
+          price
+        );
         return price;
       }
     }
-
+    console.log(
+      "[QB Amazon] Could not extract price from main product container"
+    );
     return null;
   }
 
@@ -387,37 +398,35 @@
   }
 
   function detectAvailability() {
-    const outOfStockSelectors = [
-      "#availability .a-color-price",
-      "#availability .a-color-state",
-      "#availability span",
-    ];
-
-    for (const selector of outOfStockSelectors) {
-      const el = document.querySelector(selector);
-      if (el) {
-        const text = el.textContent.toLowerCase();
-
-        if (
-          text.includes("currently unavailable") ||
-          text.includes("out of stock") ||
-          text.includes("temporarily out of stock") ||
-          text.includes("not available")
-        ) {
-          console.log("[QB Amazon] Product is OUT OF STOCK");
-          return "out_of_stock";
-        }
+    const availabilitySection = document.querySelector("#availability");
+    if (availabilitySection) {
+      const availText = availabilitySection.textContent.toLowerCase();
+      if (
+        availText.includes("currently unavailable") ||
+        availText.includes("out of stock") ||
+        availText.includes("temporarily out of stock")
+      ) {
+        console.log(
+          "[QB Amazon] Product is OUT OF STOCK (from availability section)"
+        );
+        return "out_of_stock";
       }
     }
-    return "in_stock";
-  }
+    const addToCartBtn = document.querySelector("#add-to-cart-button");
+    if (!addToCartBtn) {
+      console.log(
+        "[QB Amazon] No add to cart button found - product unavailable"
+      );
+      return "out_of_stock";
+    }
 
-  const buyBox = document.querySelector(
-    "#buybox, #add-to-cart-button, #buy-now-button"
-  );
-  if (!buyBox) {
-    console.log("[QB Amazon] No buy box found - likely unavailable");
-    return "out_of_stock";
+    if (addToCartBtn.disabled) {
+      console.log("[QB Amazon] Add to cart button is disabled - unavailable");
+      return "out_of_stock";
+    }
+
+    console.log("[QB Amazon] Product appears to be in stock");
+    return "in_stock";
   }
 
   function extractProductData() {
@@ -436,11 +445,18 @@
 
     const availability = detectAvailability();
 
-    const price = extractPrice();
-
-    if (!price && availability === "in_stock") {
-      console.log("[QB Amazon] No price found but product shows as in stock");
-      return null;
+    let price = null;
+    if (availability === "in_stock") {
+      price = extractPrice();
+      if (!price) {
+        console.log(
+          "[QB Amazon] Product is in stock but no price found - this is unusual"
+        );
+      }
+    } else {
+      console.log(
+        "[QB Amazon] Product is unavailable, skipping price extraction"
+      );
     }
 
     const image = extractProductImage();

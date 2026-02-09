@@ -182,8 +182,6 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # Inside upgrade() after the table creations:
-
     op.execute(
         """
         CREATE OR REPLACE FUNCTION validate_product_url() RETURNS trigger AS $$
@@ -234,6 +232,3 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_users_email"), table_name="users")
     op.drop_table("users")
     # ### end Alembic commands ###
-
-
-e("users")

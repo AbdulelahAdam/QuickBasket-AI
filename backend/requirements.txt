@@ -1,6 +1,7 @@
 fastapi>=0.110.0
 uvicorn[standard]
-httpx[http2]>=0.24.0
+httpx[http2]>=0.28.1
+httpcore==1.0.7
 beautifulsoup4
 pydantic>=2.12.5
 pydantic-settings>=2.12.0
@@ -8,3 +9,6 @@ structlog>=24.1.0
 sqlalchemy>=2.0.20
 psycopg2-binary>=2.9.7
 alembic>=1.13.2
+python-dotenv>=0.21.0
+supabase==2.13.0
+pyjwt==2.8.0

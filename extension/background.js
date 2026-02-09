@@ -21,6 +21,17 @@ const API_BASE = "http://127.0.0.1:8000";
 
 const nowIso = () => new Date().toISOString();
 
+// Helper to get token from session storage first, then fall back to local storage
+async function getStoredToken() {
+  let storage = await chrome.storage.session.get(["supabase_session"]);
+  if (storage.supabase_session) {
+    return storage.supabase_session;
+  }
+  // Fallback to local storage for backwards compatibility
+  storage = await chrome.storage.local.get(["supabase_session"]);
+  return storage.supabase_session || null;
+}
+
 function broadcastOnlineStatus(online) {
   chrome.runtime
     .sendMessage({
@@ -201,10 +212,7 @@ function showNotification(title, message, notificationId) {
     },
     (id) => {
       if (chrome.runtime.lastError) {
-        console.error(
-          "[QB] Notification Failed:",
-          chrome.runtime.lastError.message
-        );
+        // Silently ignore notification errors
 
         // FALLBACK
         if (chrome.runtime.lastError.message.includes("icon")) {
@@ -470,7 +478,7 @@ async function handleTrackProduct(message) {
       );
     }
   } catch (e) {
-    console.error("[QB] Backend track failed:", e);
+    // Silently ignore backend tracking errors
     showNotification(
       "QuickBasket AI",
       `Backend error: ${e.message}`,
@@ -537,6 +545,13 @@ let syncInProgress = false;
 let syncScheduled = false;
 
 async function syncAllProductAlarms() {
+  if (!navigator.onLine) {
+    console.warn(
+      "[QB] Offline: Skipping alarm sync to avoid backend DNS errors."
+    );
+    return;
+  }
+
   if (syncInProgress) {
     syncScheduled = true;
     console.log("[QB] Alarm sync in progress, will retry after completion");
@@ -548,14 +563,29 @@ async function syncAllProductAlarms() {
   try {
     console.log("[QB] Syncing all product alarms from backend...");
 
-    const response = await fetch(`${API_BASE}/dashboard/products`);
+    const token = await getStoredToken();
+
+    const headers = { "Content-Type": "application/json" };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    } else {
+      console.warn("[QB] No token found in storage, skipping alarm sync");
+      return;
+    }
+
+    const response = await fetch(`${API_BASE}/dashboard/products`, {
+      method: "GET",
+      headers: headers,
+    });
+
     if (!response.ok) {
-      console.error("[QB] Failed to fetch products for alarm sync");
+      // Silently skip sync if fetch fails
       return;
     }
 
     const products = await response.json();
-    console.log(`[QB] Found ${products.length} products to schedule`);
+    console.log(`[QB] Found ${products.length} product(s) to schedule`);
 
     const allAlarms = await chrome.alarms.getAll();
     const clearPromises = allAlarms
@@ -570,13 +600,13 @@ async function syncAllProductAlarms() {
 
     console.log("[QB] All product alarms synced");
   } catch (error) {
-    console.error("[QB] Error syncing alarms:", error);
+    // Silently ignore sync errors - will retry on next interval
   } finally {
     syncInProgress = false;
 
     if (syncScheduled) {
       syncScheduled = false;
-      setTimeout(syncAllProductAlarms, 1000); // Small delay to prevent thrashing
+      setTimeout(syncAllProductAlarms, 1000);
     }
   }
 }
@@ -599,7 +629,7 @@ async function rescheduleProductAlarm(productId) {
       ).toLocaleString()}`
     );
   } catch (error) {
-    console.error(`[QB] Failed to reschedule #${productId}:`, error);
+    // Silently ignore rescheduling errors
   }
 }
 
@@ -620,10 +650,26 @@ async function processScrapeQueue() {
 
     (async () => {
       try {
+        const token = await getStoredToken();
+
+        const headers = { "Content-Type": "application/json" };
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        } else {
+          throw new Error("Authentication token missing");
+        }
+
         const response = await fetch(
-          `${API_BASE}/dashboard/products/${productId}`
+          `${API_BASE}/dashboard/products/${productId}`,
+          {
+            method: "GET",
+            headers: headers,
+          }
         );
-        if (!response.ok) throw new Error("Backend unreachable");
+
+        if (!response.ok) {
+          throw new Error(`Backend unreachable (Status: ${response.status})`);
+        }
 
         const productData = await response.json();
         const success = await scrapeProductInBackground(productData);
@@ -639,7 +685,11 @@ async function processScrapeQueue() {
           await scheduleProductAlarm(productId, retryTime);
         }
       } catch (error) {
-        console.error(`[QB] Error #${productId}:`, error);
+        if (error.message && error.message.includes("token")) {
+          console.warn(`[QB] Product ${productId}: ${error.message}`);
+        } else {
+          // Silently ignore other scraping errors
+        }
       } finally {
         activeScrapes--;
         processScrapeQueue();
@@ -688,12 +738,12 @@ chrome.alarms.create("connectivity-check", { periodInMinutes: 1 });
 console.log("[QB] Alarm listener registered");
 
 self.addEventListener("online", async () => {
-  console.log("[QB] Browser detected internet restored (online event)");
+  console.log("[QB] Browser detected internet restored.");
   await checkActualConnectivity(true); // Force check
 });
 
 self.addEventListener("offline", () => {
-  console.log("[QB] Browser detected internet lost (offline event)");
+  console.log("[QB] Browser detected internet lost.");
   isOnline = false;
 });
 
@@ -836,7 +886,7 @@ async function scrapeProductInBackground(product) {
 
     return true;
   } catch (error) {
-    console.error(`[QB] Error product #${product.id}:`, error.message);
+    // Error in scraping logged as warning above.
     return false;
   } finally {
     if (tabId) {
@@ -856,7 +906,17 @@ async function checkAndNotifyPriceChange(
   productName
 ) {
   try {
-    const response = await fetch(`${API_BASE}/dashboard/products/${productId}`);
+    const token = await getStoredToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const response = await fetch(
+      `${API_BASE}/dashboard/products/${productId}`,
+      {
+        method: "GET",
+        headers: headers,
+      }
+    );
     if (!response.ok) return false;
 
     const productData = await response.json();
@@ -898,7 +958,7 @@ async function checkAndNotifyPriceChange(
 
     return true;
   } catch (error) {
-    console.error(`[QB] Error checking price change:`, error);
+    // Silently ignore price change check errors
     return false;
   }
 }
@@ -908,9 +968,22 @@ async function recordScrapeResult(url, scrapedData, productId) {
     const recordUrl = `${API_BASE}/api/v1/products/${productId}/record-scrape`;
     console.log(`[QB] Updating backend for product #${productId}...`);
 
+    const token = await getStoredToken();
+
+    const headers = {
+      "Content-Type": "application/json",
+    };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    } else {
+      // Silently skip record without token
+      return false;
+    }
+
     const response = await fetch(recordUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: headers,
       body: JSON.stringify({
         price: scrapedData.price ? parseFloat(scrapedData.price) : null,
         availability: scrapedData.availability || "in_stock",
@@ -954,14 +1027,11 @@ async function recordScrapeResult(url, scrapedData, productId) {
 
       return true;
     } else {
-      console.error(
-        `[QB] Backend rejected update for #${productId}:`,
-        response.status
-      );
+      // Silently ignore backend update errors
       return false;
     }
   } catch (error) {
-    console.error(`[QB] recordScrapeResult Network Error:`, error);
+    // Silently ignore scrape result errors
     return false;
   }
 }
@@ -1001,7 +1071,7 @@ async function pollBackendAlerts() {
 
     await Promise.all(ackPromises);
   } catch (e) {
-    console.warn("[QB] Alerts polling failed:", e.message);
+    // Silently ignore polling errors
   }
 }
 
@@ -1061,7 +1131,6 @@ async function checkActualConnectivity(forcedCheck = false) {
     return nowOnline;
   } catch (error) {
     if (isOnline) {
-      console.log("[QB] User is offline: ", error.message, ")");
       isOnline = false;
       broadcastOnlineStatus(false);
     }
@@ -1070,6 +1139,8 @@ async function checkActualConnectivity(forcedCheck = false) {
 }
 
 function handleRestoredConnection() {
+  let hadOfflineItems = false;
+
   if (offlineQueue.length > 0) {
     console.log(
       `[QB] Processing ${offlineQueue.length} items from offline queue`
@@ -1081,12 +1152,18 @@ function handleRestoredConnection() {
     }
     offlineQueue = [];
     processScrapeQueue();
+    hadOfflineItems = true;
   }
 
-  syncAllProductAlarms().catch((e) => console.error("[QB] Sync error:", e));
-  checkOverdueProducts().catch((e) =>
-    console.error("[QB] Overdue check error:", e)
-  );
+  syncAllProductAlarms().catch((e) => {
+    // Silently ignore sync errors - will retry on next interval
+  });
+
+  if (!hadOfflineItems) {
+    checkOverdueProducts().catch((e) => {
+      // Silently ignore overdue check errors
+    });
+  }
 }
 
 async function apiFetchWrapper(url, options) {
@@ -1103,13 +1180,94 @@ async function apiFetchWrapper(url, options) {
   }
 }
 
-async function checkOverdueProducts() {
-  try {
-    console.log("[QB] Checking for overdue products...");
+async function fetchJson(url, options = {}) {
+  const cacheKey = options.method === "GET" || !options.method ? url : null;
+  if (cacheKey && apiCache.has(cacheKey)) {
+    const cached = apiCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      console.log(`[QB] Cache hit: ${url}`);
+      return cached.data;
+    }
+    apiCache.delete(cacheKey);
+  }
 
-    const response = await fetch(`${API_BASE}/api/v1/products/pending-scrape`);
+  const token = await getStoredToken();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    CONFIG.REQUEST_TIMEOUT_MS
+  );
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: token ? `Bearer ${token}` : "",
+        "X-Client": "quickbasket-extension",
+        "X-Client-Version": QB.APP_CONFIG.VERSION,
+        "User-Agent": QB.API.USER_AGENT,
+        ...(options.headers || {}),
+      },
+    });
+
+    const text = await res.text();
+    let data = null;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { raw: text };
+    }
+
+    if (!res.ok) {
+      const msg =
+        (data && (data.detail || data.error || data.message)) ||
+        `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+
+    if (cacheKey && data) {
+      apiCache.set(cacheKey, { data, timestamp: Date.now() });
+
+      if (apiCache.size > 50) {
+        const firstKey = apiCache.keys().next().value;
+        apiCache.delete(firstKey);
+      }
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function checkOverdueProducts() {
+  if (scrapeQueue.length > 0) {
+    return;
+  }
+  try {
+    const token = await getStoredToken();
+
+    const headers = { "Content-Type": "application/json" };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    } else {
+      console.warn("[QB] No token found, skipping overdue check");
+      return;
+    }
+
+    const response = await fetch(`${API_BASE}/api/v1/products/pending-scrape`, {
+      method: "GET",
+      headers: headers,
+    });
+
     if (!response.ok) {
-      console.error("[QB] Failed to fetch pending products");
+      // Silently ignore fetch errors for pending alerts
       return;
     }
 
@@ -1119,18 +1277,19 @@ async function checkOverdueProducts() {
     console.log(`[QB] Found ${products.length} overdue products`);
 
     for (const product of products) {
-      if (!scrapeQueue.includes(product.id)) {
-        scrapeQueue.push(product.id);
-        console.log(`[QB] Queued overdue product #${product.id}`);
+      const pId = typeof product === "object" ? product.id : product;
+      if (
+        !scrapeQueue.includes(pId) &&
+        activeScrapes < CONFIG.MAX_CONCURRENT_SCRAPES
+      ) {
+        scrapeQueue.push(pId);
       }
     }
 
     if (scrapeQueue.length > 0) {
       processScrapeQueue();
     }
-  } catch (error) {
-    console.error("[QB] Error. Checking overdue products:", error);
-  }
+  } catch (error) {}
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -1256,4 +1415,4 @@ self.addEventListener("activate", () => {
   disableResourceBlocking().catch(() => {});
 });
 
-console.log("[QB] Background script loaded and ready (optimized)");
+console.log("[QB] Background script loaded and ready.");

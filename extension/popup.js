@@ -1,46 +1,27 @@
-
-
 (function () {
   "use strict";
-
 
   const CONFIG = {
     PRICE_DECIMALS: 2,
     MAX_NAME_LENGTH: 100,
+    VALIDATION_DEBOUNCE: 300,
   };
 
-
-  const elements = {
-    trackBtn: null,
-    btnText: null,
-    status: null,
-    productInfo: null,
-    productName: null,
-    productPrice: null,
-    productImage: null,
-    openDashboard: null,
+  const state = {
+    currentTab: null,
+    currentProduct: null,
+    isTracked: false,
+    isAuthMode: true,
+    validationTimeout: null,
   };
 
+  const elements = {};
 
-  let currentProduct = null;
-  let currentTab = null;
-  let isTracked = false;
-
-
-
-
-
-  async function getCurrentTab() {
-    try {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      return tab;
-    } catch (error) {
-      console.error("[QB Popup] Error getting current tab:", error);
-      return null;
+  function el(id) {
+    if (!elements[id]) {
+      elements[id] = document.getElementById(id);
     }
+    return elements[id];
   }
 
   const VALID_DOMAINS = new Set([
@@ -61,7 +42,6 @@
 
   function isValidProductUrl(url) {
     if (!url || typeof url !== "string") return false;
-
     try {
       const urlObj = new URL(url);
       if (urlObj.protocol !== "https:") return false;
@@ -73,11 +53,10 @@
     }
   }
 
-  const tempDiv = document.createElement("div");
   function escapeHtml(text) {
-    if (typeof text !== "string") return "";
-    tempDiv.textContent = text;
-    return tempDiv.innerHTML;
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   function formatPrice(price, currency = "USD") {
@@ -86,175 +65,274 @@
     return `${escapeHtml(currency)} ${numPrice.toFixed(CONFIG.PRICE_DECIMALS)}`;
   }
 
+  function showMessage(message, type = "success", targetId = "authMessage") {
+    const messageEl = el(targetId);
+    if (!messageEl) return;
 
-
-
-
-  function showStatus(message, type = "success") {
-    if (!elements.status) return;
-
-    elements.status.textContent = message;
-    elements.status.className = `status ${type} show`;
-
+    messageEl.textContent = message;
+    messageEl.className = `auth-message ${type} show`;
 
     setTimeout(() => {
-      elements.status.classList.remove("show");
+      messageEl.classList.remove("show");
     }, 5000);
   }
 
-  function setButtonState(state) {
-    if (!elements.trackBtn || !elements.btnText) return;
+  function setButtonLoading(buttonId, loading) {
+    const btn = el(buttonId);
+    if (!btn) return;
 
-    switch (state) {
-      case "loading":
-        elements.trackBtn.disabled = true;
-        elements.btnText.innerHTML =
-          'Tracking... <span class="loading"></span>';
-        break;
-
-      case "tracked":
-        elements.trackBtn.disabled = false;
-        elements.btnText.textContent = "Tracked ";
-        elements.trackBtn.style.background =
-          "linear-gradient(135deg, 059669 0%, 047857 100%)";
-        break;
-
-      case "ready":
-      default:
-        elements.trackBtn.disabled = false;
-        elements.btnText.textContent = "Track This Product";
-        elements.trackBtn.style.background = "";
-        break;
+    if (loading) {
+      btn.classList.add("loading");
+      btn.disabled = true;
+    } else {
+      btn.classList.remove("loading");
+      btn.disabled = false;
     }
   }
 
-  function displayProduct(product) {
-    if (!product || !elements.productInfo) return;
+  function showFieldError(fieldId, errorId, message) {
+    const field = el(fieldId);
+    const error = el(errorId);
 
-    try {
-      const name = escapeHtml(product.name || "Unknown Product").substring(
-        0,
-        CONFIG.MAX_NAME_LENGTH
+    if (field) field.classList.add("error");
+    if (error) {
+      error.textContent = message;
+      error.classList.add("show");
+    }
+  }
+
+  function clearFieldError(fieldId, errorId) {
+    const field = el(fieldId);
+    const error = el(errorId);
+
+    if (field) field.classList.remove("error");
+    if (error) error.classList.remove("show");
+  }
+
+  function validateEmailField(email) {
+    clearFieldError("emailInput", "emailError");
+
+    if (!email) {
+      showFieldError("emailInput", "emailError", "Email is required");
+      return false;
+    }
+
+    if (!authService.validateEmail(email)) {
+      showFieldError(
+        "emailInput",
+        "emailError",
+        "Please enter a valid email address"
       );
+      return false;
+    }
 
-      const price = formatPrice(product.price, product.currency);
+    return true;
+  }
 
-      elements.productName.textContent = name;
-      elements.productPrice.textContent = price;
+  function validatePasswordField(password, showStrength = false) {
+    clearFieldError("passwordInput", "passwordError");
 
+    if (!password) {
+      showFieldError("passwordInput", "passwordError", "Password is required");
+      return false;
+    }
 
-      if (product.image && elements.productImage) {
-        elements.productImage.src = product.image;
-        elements.productImage.style.display = "block";
+    const validation = authService.validatePassword(password);
+
+    if (!validation.valid) {
+      showFieldError("passwordInput", "passwordError", validation.error);
+      return false;
+    }
+
+    if (showStrength) {
+      updatePasswordStrength(password);
+    }
+
+    return true;
+  }
+
+  function updatePasswordStrength(password) {
+    const strengthEl = el("passwordStrength");
+    if (!strengthEl) return;
+
+    let strength = "weak";
+    let score = 0;
+
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[a-z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    if (score >= 4) strength = "strong";
+    else if (score >= 3) strength = "medium";
+
+    strengthEl.className = `password-strength ${strength} show`;
+  }
+
+  function switchToLogin() {
+    el("loginTab").classList.add("active");
+    el("registerTab").classList.remove("active");
+    el("submitBtnText").textContent = "Login";
+    el("passwordStrength").classList.remove("show");
+    el("forgotPassword").style.display = "block";
+  }
+
+  function switchToRegister() {
+    el("loginTab").classList.remove("active");
+    el("registerTab").classList.add("active");
+    el("submitBtnText").textContent = "Create Account";
+    el("forgotPassword").style.display = "none";
+  }
+
+  function showAuthScreen() {
+    el("authScreen").classList.remove("hidden");
+    el("mainScreen").classList.remove("active");
+    state.isAuthMode = true;
+  }
+
+  function showMainScreen() {
+    el("authScreen").classList.add("hidden");
+    el("mainScreen").classList.add("active");
+    state.isAuthMode = false;
+
+    if (authService.user) {
+      const email = authService.user.email;
+      el("userEmail").textContent = email;
+
+      const avatar = el("userAvatar");
+      if (avatar) {
+        avatar.textContent = email.charAt(0).toUpperCase();
       }
-
-      elements.productInfo.style.display = "block";
-
-      currentProduct = product;
-    } catch (error) {
-      console.error("[QB Popup] Error displaying product:", error);
     }
   }
 
-  function hideProduct() {
-    if (elements.productInfo) {
-      elements.productInfo.style.display = "none";
-    }
-  }
+  async function handleAuthSubmit(e) {
+    e.preventDefault();
 
+    const email = el("emailInput").value.trim();
+    const password = el("passwordInput").value;
+    const isLogin = el("loginTab").classList.contains("active");
 
-
-
-
-  function initElements() {
-    elements.trackBtn = document.getElementById("trackBtn");
-    elements.btnText = document.getElementById("btnText");
-    elements.status = document.getElementById("status");
-    elements.productInfo = document.getElementById("productInfo");
-    elements.productName = document.getElementById("productName");
-    elements.productPrice = document.getElementById("productPrice");
-    elements.productImage = document.getElementById("productImage");
-    elements.openDashboard = document.getElementById("openDashboard");
-  }
-
-  function setupEventListeners() {
-    if (elements.trackBtn) {
-      elements.trackBtn.addEventListener("click", handleTrackClick);
-    }
-
-    if (elements.openDashboard) {
-      elements.openDashboard.addEventListener("click", handleDashboardClick);
-    }
-  }
-
-  async function init() {
-    initElements();
-    setupEventListeners();
-
-    currentTab = await getCurrentTab();
-    if (!currentTab) {
-      showStatus("Could not access current tab", "error");
-      if (elements.trackBtn) elements.trackBtn.disabled = true;
-      return;
-    }
-
-    const url = currentTab.url || "";
-
-    if (!isValidProductUrl(url)) {
-      showStatus("Not on a supported marketplace", "error");
-      if (elements.trackBtn) elements.trackBtn.disabled = true;
-      hideProduct();
-      return;
-    }
-
-    console.log("[QB Popup] Ready on product page - waiting for user action");
-    setButtonState("ready");
-  }
-
-
-
-
-
-  async function handleTrackClick() {
-    if (isTracked) {
-
-      showStatus("This product is already being tracked!", "success");
-      return;
-    }
-
-    setButtonState("loading");
+    setButtonLoading("submitBtn", true);
 
     try {
-      if (!currentTab) {
-        throw new Error("No tab information available");
+      let result;
+
+      if (isLogin) {
+        result = await authService.login(email, password);
+      } else {
+        result = await authService.register(email, password);
       }
 
-      if (!isValidProductUrl(currentTab.url)) {
-        throw new Error("Not on a supported product page");
+      if (result.success) {
+        if (result.requiresConfirmation) {
+          showMessage(result.message, "success");
+          el("emailInput").value = "";
+          el("passwordInput").value = "";
+          switchToLogin();
+        } else {
+          showMessage(
+            isLogin ? "Welcome back!" : "Account created!",
+            "success"
+          );
+          setTimeout(() => {
+            showMainScreen();
+            checkCurrentPage();
+          }, 800);
+        }
+      } else {
+        showMessage(result.error, "error");
+      }
+    } catch (error) {
+      showMessage("An unexpected error occurred. Please try again.", "error");
+    } finally {
+      setButtonLoading("submitBtn", false);
+    }
+  }
+
+  async function handleLogout() {
+    if (!confirm("Are you sure you want to logout?")) return;
+
+    await authService.logout();
+    showAuthScreen();
+
+    el("emailInput").value = "";
+    el("passwordInput").value = "";
+    clearFieldError("emailInput", "emailError");
+    clearFieldError("passwordInput", "passwordError");
+
+    state.currentProduct = null;
+    state.isTracked = false;
+  }
+
+  async function checkCurrentPage() {
+    try {
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      state.currentTab = tab;
+
+      if (!tab) {
+        showMessage("Could not access current tab", "error", "statusMessage");
+        el("trackBtn").disabled = true;
+        return;
       }
 
-      console.log("[QB Popup] Requesting product extraction...");
+      const url = tab.url || "";
 
+      if (!isValidProductUrl(url)) {
+        showMessage("Not on a supported marketplace", "error", "statusMessage");
+        el("trackBtn").disabled = true;
+        el("previewSkeleton").style.display = "none";
+        el("previewContent").style.display = "none";
+        return;
+      }
 
-      const extractPromise = chrome.tabs.sendMessage(currentTab.id, {
-        action: "extractProduct",
-      });
+      el("trackBtn").disabled = false;
+      el("previewSkeleton").style.display = "flex";
+      el("previewContent").style.display = "none";
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                "Content script not responding. Please refresh the page."
-              )
-            ),
-          10000
-        );
-      });
+      setTimeout(() => {
+        el("previewSkeleton").style.display = "none";
+      }, 1500);
+    } catch (error) {
+      showMessage("Error accessing page", "error", "statusMessage");
+    }
+  }
 
+  async function handleTrackProduct() {
+    if (state.isTracked) {
+      showMessage(
+        "This product is already being tracked!",
+        "success",
+        "statusMessage"
+      );
+      return;
+    }
+
+    if (!state.currentTab) {
+      showMessage("No active tab found", "error", "statusMessage");
+      return;
+    }
+
+    if (!isValidProductUrl(state.currentTab.url)) {
+      showMessage("Not on a supported product page", "error", "statusMessage");
+      return;
+    }
+
+    el("trackBtn").disabled = true;
+    el("trackBtnText").textContent = "Tracking...";
+
+    try {
       const extractResponse = await Promise.race([
-        extractPromise,
-        timeoutPromise,
+        chrome.tabs.sendMessage(state.currentTab.id, {
+          action: "extractProduct",
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout")), 10000)
+        ),
       ]);
 
       if (chrome.runtime.lastError) {
@@ -268,16 +346,26 @@
       }
 
       const product = extractResponse.product;
-      console.log("[QB Popup] Product extracted:", product);
 
+      el("previewSkeleton").style.display = "none";
+      el("previewContent").style.display = "block";
 
-      displayProduct(product);
+      if (product.image) {
+        el("productImage").src = product.image;
+        el("productImage").style.display = "block";
+      }
 
+      el("productName").textContent = product.name || "Unknown Product";
+      el("productPrice").textContent = formatPrice(
+        product.price,
+        product.currency
+      );
 
-      console.log("[QB Popup] Sending to background for storage...");
+      state.currentProduct = product;
+
       const trackResponse = await chrome.runtime.sendMessage({
         action: "trackProduct",
-        url: currentTab.url,
+        url: state.currentTab.url,
         product: product,
       });
 
@@ -286,77 +374,156 @@
       }
 
       if (trackResponse?.success) {
-        isTracked = true;
-        setButtonState("tracked");
-        showStatus("Product tracked successfully! ", "success");
-        if (trackResponse?.success) {
-          isTracked = true;
-          setButtonState("tracked");
+        state.isTracked = true;
+        el("trackBtnText").textContent = "Tracked Successfully!";
+        el("trackBtn").style.background =
+          "linear-gradient(135deg, #48bb78 0%, #38a169 100%)";
 
-          const aiSummary =
-            trackResponse?.backend?.data?.ai?.summary ||
-            trackResponse?.backend?.data?.ai?.decision ||
-            null;
+        const aiSummary =
+          trackResponse?.backend?.data?.ai?.summary ||
+          trackResponse?.backend?.data?.ai?.decision ||
+          null;
 
-          if (aiSummary) {
-            showStatus(`AI: ${aiSummary}`, "success");
-          } else {
-            showStatus("Product tracked successfully! ", "success");
-          }
-          console.log("[QB Popup] Product tracked successfully");
+        if (aiSummary) {
+          showMessage(`AI: ${aiSummary}`, "success", "statusMessage");
         } else {
-          throw new Error(trackResponse?.error || "Failed to save product");
+          showMessage(
+            "Product tracked successfully!",
+            "success",
+            "statusMessage"
+          );
         }
+
+        setTimeout(() => {
+          el("trackBtnText").textContent = "Track This Product";
+          el("trackBtn").style.background = "";
+          el("trackBtn").disabled = false;
+        }, 3000);
+      } else {
+        throw new Error(trackResponse?.error || "Failed to save product");
       }
     } catch (error) {
-      console.error("[QB Popup] Track error:", error);
-
       let errorMessage = "Failed to track product";
 
       if (
-        error.message.includes("receiving end") ||
-        error.message.includes("Could not establish connection")
-      ) {
-        errorMessage = "Please refresh the page and try again";
-      } else if (
-        error.message.includes("timeout") ||
+        error.message.includes("Timeout") ||
         error.message.includes("not responding")
       ) {
         errorMessage = "Page not responding. Please refresh and try again.";
+      } else if (
+        error.message.includes("receiving end") ||
+        error.message.includes("connection")
+      ) {
+        errorMessage = "Please refresh the page and try again";
       } else if (error.message) {
         errorMessage = error.message;
       }
 
-      showStatus(errorMessage, "error");
-      setButtonState("ready");
+      showMessage(errorMessage, "error", "statusMessage");
+      el("trackBtn").disabled = false;
+      el("trackBtnText").textContent = "Track This Product";
     }
   }
 
-  function handleDashboardClick(e) {
-    e.preventDefault();
+  function setupEventListeners() {
+    const loginTab = el("loginTab");
+    const registerTab = el("registerTab");
 
-    try {
-      chrome.tabs.create({
-        url: chrome.runtime.getURL("dashboard.html"),
-      });
-    } catch (error) {
-      console.error("[QB Popup] Dashboard error:", error);
-      showStatus("Could not open dashboard", "error");
+    loginTab?.addEventListener("click", () => {
+      switchToLogin();
+    });
+
+    registerTab?.addEventListener("click", () => {
+      switchToRegister();
+    });
+
+    el("authForm")?.addEventListener("submit", handleAuthSubmit);
+
+    el("emailInput")?.addEventListener("input", (e) => {
+      if (state.validationTimeout) clearTimeout(state.validationTimeout);
+      state.validationTimeout = setTimeout(() => {
+        if (e.target.value) validateEmailField(e.target.value);
+      }, CONFIG.VALIDATION_DEBOUNCE);
+    });
+
+    el("passwordInput")?.addEventListener("input", (e) => {
+      const isRegisterMode = el("registerTab").classList.contains("active");
+      if (state.validationTimeout) clearTimeout(state.validationTimeout);
+      state.validationTimeout = setTimeout(() => {
+        if (e.target.value)
+          validatePasswordField(e.target.value, isRegisterMode);
+      }, CONFIG.VALIDATION_DEBOUNCE);
+    });
+
+    el("logoutBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleLogout();
+    });
+
+    el("trackBtn")?.addEventListener("click", handleTrackProduct);
+
+    el("dashboardLink")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+    });
+
+    el("forgotPassword")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      const email = el("emailInput").value.trim();
+
+      if (!email || !authService.validateEmail(email)) {
+        showMessage("Please enter your email address first", "error");
+        return;
+      }
+
+      fetch(`${EXT_CONFIG.SUPABASE_URL}/auth/v1/recover`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: EXT_CONFIG.SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ email }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.error) {
+            showMessage(data.error.message, "error");
+          } else {
+            showMessage(
+              "Password reset email sent! Check your inbox.",
+              "success"
+            );
+          }
+        })
+        .catch(() => {
+          showMessage("Failed to send reset email. Please try again.", "error");
+        });
+    });
+  }
+
+  async function init() {
+    if (typeof EXT_CONFIG === "undefined") {
+      setupEventListeners();
+      showMainScreen();
+      await checkCurrentPage();
+      return;
+    }
+
+    if (typeof authService === "undefined") {
+      setTimeout(init, 100);
+      return;
+    }
+
+    setupEventListeners();
+    const isAuthenticated = await authService.init();
+
+    if (isAuthenticated) {
+      showMainScreen();
+      await checkCurrentPage();
+    } else {
+      showAuthScreen();
     }
   }
 
-
-
-
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
-
-  window.addEventListener("beforeunload", () => {
-    currentProduct = null;
-    currentTab = null;
-  });
+  init();
 })();
