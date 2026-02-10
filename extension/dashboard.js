@@ -300,7 +300,7 @@
         }
         throw new Error("CONNECTION_LOST");
       }
-      throw error;
+      //throw error;
     } finally {
       clearTimeout(timeout);
       abortControllers.delete(url);

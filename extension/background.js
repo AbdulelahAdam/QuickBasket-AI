@@ -76,7 +76,20 @@ async function disableResourceBlocking() {
   }
 }
 
-enableResourceBlocking();
+async function clearAllDynamicRules() {
+  try {
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    const ruleIds = existingRules.map((rule) => rule.id);
+    if (ruleIds.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: ruleIds,
+      });
+      console.log(`[QB] Cleared ${ruleIds.length} existing dynamic rule(s)`);
+    }
+  } catch (e) {
+    console.warn("[QB] Could not clear dynamic rules:", e.message);
+  }
+}
 
 const apiCache = new Map();
 const CACHE_TTL_MS = 30000; // 30 second cache
@@ -1353,7 +1366,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log("[QB] onInstalled fired - Reason:", details.reason);
 
-  await enableResourceBlocking();
+  await clearAllDynamicRules();
 
   if (details.reason === "install") {
     chrome.storage.local.set({
@@ -1381,7 +1394,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(async () => {
   console.log("[QB] onStartup fired - Browser restarted");
 
-  await enableResourceBlocking();
+  await clearAllDynamicRules();
 
   await chrome.alarms.clear("quickbasket-auto-scrape");
   console.log("[QB] Cleared legacy global alarm");
@@ -1412,7 +1425,7 @@ self.addEventListener("activate", () => {
   productsCache = null;
   backendMapCache = null;
 
-  disableResourceBlocking().catch(() => {});
+  clearAllDynamicRules().catch(() => {});
 });
 
 console.log("[QB] Background script loaded and ready.");
