@@ -8,7 +8,7 @@
   });
 
   const API = Object.freeze({
-    BASE_URL: "http://127.0.0.1:8000",
+    BASE_URL: "https://international-janeen-quickbasket-ai-8d2d28b7.koyeb.app",
     ROUTES: Object.freeze({
       TRACK_BROWSER: "/api/v1/track/browser",
       ALERTS_PENDING: "/api/v1/alerts/pending",

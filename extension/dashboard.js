@@ -16,7 +16,9 @@
 
   const QB = self.QB_CONFIG || null;
   const API_BASE =
-    EXT_CONFIG?.API_BASE_URL || QB?.API?.BASE_URL || "http://127.0.0.1:8000";
+    EXT_CONFIG?.API_BASE_URL ||
+    QB?.API?.BASE_URL ||
+    "https://international-janeen-quickbasket-ai-8d2d28b7.koyeb.app";
 
   const API = {
     DASHBOARD_PRODUCTS: `${API_BASE}/dashboard/products`,

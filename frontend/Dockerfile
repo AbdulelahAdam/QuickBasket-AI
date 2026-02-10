@@ -8,5 +8,5 @@ COPY ./public /usr/share/nginx/html
 
 EXPOSE 80
 
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD curl -f http://localhost || exit 1
+HEALTHCHECK --interval=2m --timeout=3s \
+    CMD curl -f http://localhost/index.html || exit 1

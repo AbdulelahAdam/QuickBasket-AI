@@ -30,8 +30,7 @@
     "declarativeNetRequest"
   ],
   "host_permissions": [
-    "http://localhost:8000/*",
-    "http://127.0.0.1:8000/*",
+    "https://international-janeen-quickbasket-ai-8d2d28b7.koyeb.app/*",
     "https://*.amazon.com/*",
     "https://*.amazon.ca/*",
     "https://*.amazon.co.uk/*",

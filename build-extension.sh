@@ -23,7 +23,7 @@ if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
 fi
 
 # Set API base URL (localhost for now).
-API_BASE_URL=${API_BASE_URL:-"http://127.0.0.1:8000"}
+API_BASE_URL=${API_BASE_URL:-"https://international-janeen-quickbasket-ai-8d2d28b7.koyeb.app"}
 
 # Create extension-config.js from template
 echo "Generating extension-config.js..."

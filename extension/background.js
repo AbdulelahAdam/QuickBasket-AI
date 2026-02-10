@@ -17,7 +17,8 @@ const CONFIG = {
   RETRY_DELAY_MS: 300000, // 5 min retry for failed scrapes
 };
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE =
+  "https://international-janeen-quickbasket-ai-8d2d28b7.koyeb.app";
 
 const nowIso = () => new Date().toISOString();
 
