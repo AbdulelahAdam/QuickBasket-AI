@@ -2,6 +2,5 @@
 .dockerignore
 node_modules/
 .venv/
-extension/extension-config.js
 supabase/.env
 supabase/.temp/

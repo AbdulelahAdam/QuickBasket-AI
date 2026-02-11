@@ -13,34 +13,31 @@ Track prices across Amazon, Noon, and other marketplaces with AI-powered insight
 
 ## Installation
 
-### 1. Download
+1. **Download the extension:**
 
-Download the latest release from the [Releases page](https://github.com/AbdulelahAdam/quickbasket-ai/releases) or clone the repository:
+   - Click the green **"Code"** button above
+   - Select **"Download ZIP"**
+   - Extract the ZIP file to a location on your computer
 
-```bash
-git clone https://github.com/AbdulelahAdam/quickbasket-ai.git
-cd quickbasket-ai
-```
+2. **Load in your browser:**
 
-### 2. Install Extension
+   - Open your Chromium-based browser (Chrome, Edge, Brave, etc.)
+   - Go to the extensions page:
+     - Chrome: `chrome://extensions/`
+     - Edge: `edge://extensions/`
+     - Brave: `brave://extensions/`
+   - Enable **Developer mode** (toggle in top-right corner)
+   - Click **"Load unpacked"**
+   - Select the `extension` folder from the extracted files
+   - The QuickBasket AI icon should appear in your toolbar
 
-1. Open your Chromium-based browser (Chrome, Edge, Brave, etc.)
-2. Navigate to extensions page:
-   - Chrome: `chrome://extensions/`
-   - Edge: `edge://extensions/`
-   - Brave: `brave://extensions/`
-3. Enable **Developer mode** (toggle in top-right corner)
-4. Click **Load unpacked**
-5. Select the `extension` folder from this repository
-6. The QuickBasket AI icon should appear in your toolbar
+3. **Start tracking:**
+   - Click the QuickBasket AI icon
+   - Create an account with your email
+   - Navigate to any product on Amazon or Noon
+   - Click the extension icon and press **"Track This Product"**
 
-### 3. Start Using
-
-1. Click the QuickBasket AI icon in your toolbar
-2. Create an account or log in
-3. Navigate to any product page on Amazon or Noon
-4. Click the extension icon and press "Track This Product"
-5. View your dashboard to see price history and AI insights
+That's it! No configuration needed.
 
 ## Supported Marketplaces
 
@@ -115,15 +112,6 @@ The extension requires these permissions:
 - **Notifications** - Alert you about price drops
 - **Host Permissions** - Access Amazon and Noon to check prices
 
-## Uninstallation
-
-To completely remove QuickBasket AI:
-
-1. Go to your browser's extensions page
-2. Find "QuickBasket AI"
-3. Click "Remove"
-4. Your account data will be permanently deleted after 30 days of inactivity
-
 ## Limits
 
 - Maximum 50 tracked products per account
@@ -141,4 +129,4 @@ MIT License - see LICENSE file for details
 
 ---
 
-Made by Abdulelah Adam.
+Made by Abdulelah Adam
